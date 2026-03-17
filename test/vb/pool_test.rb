@@ -123,6 +123,24 @@ class VB::PoolTest < TLDR
     assert_equal({}, @fake_state["workspaces"])
   end
 
+  def test_destroy_all_removes_all_workspaces_including_last
+    @fake_state["workspaces"] = {
+      "alpha" => {"workspace_dir" => @repo_root},
+      "beta" => {"workspace_dir" => @repo_root},
+      "gamma" => {"workspace_dir" => @repo_root}
+    }
+    fake_workspace = Object.new
+    def fake_workspace.forget = nil
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: @fake_state_class,
+      workspace_factory: ->(**) { fake_workspace }
+    )
+    pool.destroy_all
+    assert_equal({}, @fake_state["workspaces"])
+  end
+
   def test_acquire_returns_workspace_name
     fake_workspace = Object.new
     def fake_workspace.add = nil

@@ -48,4 +48,14 @@ class VB::VMTest < TLDR
     assert_equal Array, vibe_args.class
     assert vibe_args.any? { |a| a.include?("opencode") }
   end
+
+  def test_launch_cleans_up_tmpdir
+    captured_config_dir = nil
+    @vm.define_singleton_method(:run_vibe) do |args|
+      mount_arg = args.find { |a| a.include?(":/mnt/claude-config:read-only") }
+      captured_config_dir = mount_arg.split(":").first
+    end
+    @vm.launch(send_cmd: "test")
+    refute Dir.exist?(captured_config_dir), "Temp dir should be cleaned up after launch"
+  end
 end

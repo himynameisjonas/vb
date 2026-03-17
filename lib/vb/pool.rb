@@ -49,7 +49,7 @@ module VB
 
     def destroy_all
       @state_class.with_lock(repo_root: @repo_root) do |state|
-        (state["workspaces"] || {}).each_key { |name| _destroy(name: name, state: state) }
+        (state["workspaces"] || {}).keys.each { |name| _destroy(name: name, state: state) }
       end
     end
 

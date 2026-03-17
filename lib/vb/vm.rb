@@ -10,8 +10,9 @@ module VB
     end
 
     def launch(send_cmd:)
-      config_dir = Dir.mktmpdir
-      run_vibe(args_for(send_cmd: send_cmd, config_dir: config_dir))
+      Dir.mktmpdir do |config_dir|
+        run_vibe(args_for(send_cmd: send_cmd, config_dir: config_dir))
+      end
     end
 
     def args_for(send_cmd:, config_dir:)

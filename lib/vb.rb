@@ -1,0 +1,11 @@
+# frozen_string_literal: true
+
+require_relative "vb/version"
+require_relative "vb/names"
+require_relative "vb/state"
+require_relative "vb/process"
+require_relative "vb/workspace"
+require_relative "vb/vm"
+require_relative "vb/deps"
+require_relative "vb/pool"
+require_relative "vb/cli"

@@ -36,4 +36,18 @@ class VB::WorkspaceTest < TLDR
     end
     assert @workspace.dirty?
   end
+
+  def test_dirty_returns_false_when_no_changes
+    @workspace.define_singleton_method(:run_jj_capture) do |args, chdir: nil|
+      "The working copy has no changes.\n"
+    end
+    refute @workspace.dirty?
+  end
+
+  def test_reset_to_latest_calls_jj_edit_trunk
+    @workspace.reset_to_latest
+    assert_equal 1, @jj_calls.length
+    assert_includes @jj_calls[0][:args], "edit"
+    assert_includes @jj_calls[0][:args], "trunk"
+  end
 end

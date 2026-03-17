@@ -17,11 +17,24 @@ module VB
       run_jj(["workspace", "forget", name], chdir: @workspace_dir)
     end
 
+    def dirty?
+      output = run_jj_capture(["status"], chdir: @workspace_dir)
+      output.include?("Working copy changes:")
+    end
+
+    def reset_to_latest
+      run_jj(["edit", "trunk"], chdir: @workspace_dir)
+    end
+
     private
 
     def run_jj(args, chdir: nil)
       opts = chdir ? {chdir: chdir} : {}
       system("jj", *args, **opts)
+    end
+
+    def run_jj_capture(args, chdir: nil)
+      Dir.chdir(chdir || Dir.pwd) { `jj #{args.join(" ")}` }
     end
   end
 end

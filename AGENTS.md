@@ -85,6 +85,17 @@ Do not skip steps. Do not write tests after the fact. Do not write more than one
 - Keep classes small and single-purpose
 - Prefer keyword arguments for anything with 2+ parameters
 
+### Commits — atomic, via jj
+
+- This project uses **jujutsu (`jj`)** for version control, not `git`
+- Every logical change must be committed atomically — one concern per commit
+- After each TDD cycle (test passes + StandardRB clean), commit:
+  - `jj commit -m "Add Names: friendly name generation"`
+  - `jj commit -m "Add State: JSON read/write with file locking"`
+- Commit messages: imperative mood, concise, no prefix conventions needed
+- Do **not** use `git commit` — always `jj commit`
+- `jj log` to view history, `jj status` to see working copy changes
+
 ### Linting and formatting
 
 - Use **StandardRB** (`https://github.com/standardrb/standard`) as the single source of truth for formatting and linting

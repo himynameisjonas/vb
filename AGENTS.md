@@ -64,6 +64,14 @@ vb destroy --all   →  destroy all workspaces for current repo
 
 Do not skip steps. Do not write tests after the fact. Do not write more than one test before making it pass.
 
+**This rule applies to bug fixes too.** Before fixing any bug:
+1. Write a test that fails because of the bug (reproduces the exact failure).
+2. Confirm the test fails.
+3. Apply the fix.
+4. Confirm the test passes.
+
+Never fix a bug without a reproducing test. A bug without a test will regress.
+
 ### Test tooling
 
 - **TLDR** (`https://github.com/tendersearls/tldr`) for all tests

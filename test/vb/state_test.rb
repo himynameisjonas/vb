@@ -37,6 +37,12 @@ class VB::StateTest < TLDR
     assert_equal "bar", result
   end
 
+  def test_with_lock_returns_block_return_value
+    result = VB::State.with_lock(repo_root: @repo_root) { |_s| ["hello", "world"] }
+    FileUtils.rm_rf(state_dir)
+    assert_equal ["hello", "world"], result
+  end
+
   def test_heals_missing_workspace_dirs
     VB::State.with_lock(repo_root: @repo_root) do |s|
       s["workspaces"] = {

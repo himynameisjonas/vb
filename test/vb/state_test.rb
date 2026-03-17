@@ -57,6 +57,15 @@ class VB::StateTest < TLDR
     refute result.key?("dead")
   end
 
+  def test_with_lock_read_mode_does_not_persist_changes
+    VB::State.with_lock(repo_root: @repo_root) { |s| s["foo"] = "original" }
+    VB::State.with_lock(repo_root: @repo_root, write: false) { |s| s["foo"] = "mutated" }
+    result = nil
+    VB::State.with_lock(repo_root: @repo_root, write: false) { |s| result = s["foo"] }
+    FileUtils.rm_rf(state_dir)
+    assert_equal "original", result
+  end
+
   private
 
   def state_dir

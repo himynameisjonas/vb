@@ -6,18 +6,20 @@ require "json"
 
 module VB
   class State
-    def self.with_lock(repo_root:, &block)
+    def self.with_lock(repo_root:, write: true, &block)
       path = state_path(repo_root)
       FileUtils.mkdir_p(File.dirname(path))
       File.open(path, File::RDWR | File::CREAT, 0o600) do |f|
-        f.flock(File::LOCK_EX)
+        f.flock(write ? File::LOCK_EX : File::LOCK_SH)
         raw = f.read
         state = JSON.parse(raw.empty? ? "{}" : raw)
         state = heal(state, repo_root: repo_root)
         result = block.call(state)
-        f.rewind
-        f.truncate(0)
-        f.write(JSON.generate(state))
+        if write
+          f.rewind
+          f.truncate(0)
+          f.write(JSON.generate(state))
+        end
         result
       end
     end

@@ -228,11 +228,35 @@ class VB::PoolTest < TLDR
     assert_equal "myeditor", launched_with
   end
 
+  def test_acquire_writes_state_before_launching_vm
+    call_log = []
+    fake_workspace = Object.new
+    def fake_workspace.add
+    end
+    fake_vm = Object.new
+    fake_vm.define_singleton_method(:launch) { |send_cmd:| call_log << :launch }
+
+    state = {}
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "test-name" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(workspace_dir:, disk_image:) do
+        call_log << :state_written if state.dig("workspaces", "test-name")
+        fake_vm
+      end
+    )
+    pool.acquire(send_cmd: "opencode")
+
+    assert_equal [:state_written, :launch], call_log
+  end
+
   private
 
   def build_fake_state_class(state)
     Class.new do
-      define_singleton_method(:with_lock) { |repo_root:, &block| block.call(state) }
+      define_singleton_method(:with_lock) { |repo_root:, write: true, &block| block.call(state) }
     end
   end
 end

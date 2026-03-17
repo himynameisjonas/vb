@@ -23,7 +23,7 @@ module VB
     end
 
     def list
-      @state_class.with_lock(repo_root: @repo_root) do |state|
+      @state_class.with_lock(repo_root: @repo_root, write: false) do |state|
         workspaces = state["workspaces"] || {}
         dirs = workspaces.values.map { |v| v["workspace_dir"] }
         process = @process_factory.call
@@ -59,18 +59,19 @@ module VB
       workspace_dir = File.join(parent_dir, "#{File.basename(@repo_root)}-#{name}")
       disk_image = File.join(@repo_root, ".vibe", "instance.raw")
 
+      vm = nil
       @state_class.with_lock(repo_root: @repo_root) do |state|
         state["workspaces"] ||= {}
         ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
         ws.add
-        vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: disk_image)
-        vm.launch(send_cmd: send_cmd)
         state["workspaces"][name] = {
           "workspace_dir" => workspace_dir,
           "disk_image" => disk_image,
           "created_at" => Time.now.iso8601
         }
+        vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: disk_image)
       end
+      vm.launch(send_cmd: send_cmd)
       name
     end
 

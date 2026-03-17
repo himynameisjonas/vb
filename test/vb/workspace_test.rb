@@ -29,4 +29,11 @@ class VB::WorkspaceTest < TLDR
     assert_includes @jj_calls[0][:args], "forget"
     assert_includes @jj_calls[0][:args], "swift-falcon"
   end
+
+  def test_dirty_returns_true_when_changes_present
+    @workspace.define_singleton_method(:run_jj_capture) do |args, chdir: nil|
+      "Working copy changes:\nM foo.rb\n"
+    end
+    assert @workspace.dirty?
+  end
 end

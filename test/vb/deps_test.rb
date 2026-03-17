@@ -24,4 +24,26 @@ class VB::DepsTest < TLDR
     File.write(File.join(@workspace_dir, "Gemfile.lock"), "same content")
     assert @deps.up_to_date?
   end
+
+  def test_differing_lockfile_is_stale
+    File.write(File.join(@repo_dir, "Gemfile.lock"), "new content")
+    File.write(File.join(@workspace_dir, "Gemfile.lock"), "old content")
+    assert_includes @deps.stale_lockfiles, "Gemfile.lock"
+  end
+
+  def test_missing_workspace_lockfile_is_stale
+    File.write(File.join(@repo_dir, "Gemfile.lock"), "content")
+    assert_includes @deps.stale_lockfiles, "Gemfile.lock"
+  end
+
+  def test_install_commands_for_stale_gemfile_lock
+    File.write(File.join(@repo_dir, "Gemfile.lock"), "new")
+    File.write(File.join(@workspace_dir, "Gemfile.lock"), "old")
+    assert_includes @deps.install_commands, "bundle install"
+  end
+
+  def test_install_commands_for_pnpm_lock
+    File.write(File.join(@repo_dir, "pnpm-lock.yaml"), "new")
+    assert_includes @deps.install_commands, "pnpm install"
+  end
 end

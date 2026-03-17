@@ -12,7 +12,8 @@ module VB
     end
 
     def forget
-      name = File.basename(@workspace_dir)
+      repo_prefix = "#{File.basename(@repo_root)}-"
+      name = File.basename(@workspace_dir).delete_prefix(repo_prefix)
       run_jj(["workspace", "forget", name], chdir: @workspace_dir)
     end
 

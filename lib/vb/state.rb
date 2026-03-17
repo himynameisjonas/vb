@@ -14,10 +14,11 @@ module VB
         raw = f.read
         state = JSON.parse(raw.empty? ? "{}" : raw)
         state = heal(state, repo_root: repo_root)
-        block.call(state)
+        result = block.call(state)
         f.rewind
         f.truncate(0)
         f.write(JSON.generate(state))
+        result
       end
     end
 

@@ -27,9 +27,8 @@ module VB
     end
 
     def self.heal(state, repo_root:)
-      workspaces = state["workspaces"] || {}
-      workspaces.select! { |_, v| Dir.exist?(v["workspace_dir"].to_s) }
-      state["workspaces"] = workspaces
+      return state unless state.key?("workspaces")
+      state["workspaces"].select! { |_, v| Dir.exist?(v["workspace_dir"].to_s) }
       state
     end
   end

@@ -25,4 +25,13 @@ class VB::ProcessTest < TLDR
     result = process.in_use_dirs(workspace_dirs: ["/repo-alpha", "/repo-gamma"])
     assert_equal ["/repo-alpha"], result
   end
+
+  def test_in_use_dirs_returns_empty_when_none_match
+    process = VB::Process.new
+    def process.ps_output
+      "501 9999 bash\n"
+    end
+    result = process.in_use_dirs(workspace_dirs: ["/repo-alpha", "/repo-beta"])
+    assert_equal [], result
+  end
 end

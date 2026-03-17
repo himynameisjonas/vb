@@ -16,7 +16,7 @@ module VB
     def forget
       repo_prefix = "#{File.basename(@repo_root)}-"
       name = File.basename(@workspace_dir).delete_prefix(repo_prefix)
-      run_jj(["workspace", "forget", name], chdir: @workspace_dir)
+      run_jj(["workspace", "forget", name], chdir: @repo_root)
     end
 
     def dirty?

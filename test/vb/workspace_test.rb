@@ -30,6 +30,12 @@ class VB::WorkspaceTest < TLDR
     assert_includes @jj_calls[0][:args], "swift-falcon"
   end
 
+  def test_forget_runs_from_repo_root_not_workspace_dir
+    @workspace.forget
+    assert_equal "/tmp/myrepo", @jj_calls[0][:chdir],
+      "forget must run from repo_root so jj can find the workspace; running from workspace_dir causes 'No such workspace' warning"
+  end
+
   def test_dirty_returns_true_when_changes_present
     fake_ok = Object.new
     def fake_ok.success? = true

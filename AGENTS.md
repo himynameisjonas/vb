@@ -15,8 +15,10 @@ It wraps **jj workspaces** (for VCS isolation) and **vibe VMs** (for sandboxed e
 ## Repo structure
 
 ```
-vb                        # executable entry point (binstub)
+exe/
+  vb                        # executable entry point (binstub)
 lib/
+  vb.rb                     # main require file
   vb/
     cli.rb                # Thor subcommands: acquire, status, destroy, return
     pool.rb               # acquire, release, list, destroy logic
@@ -26,16 +28,16 @@ lib/
     process.rb            # in-use detection via `ps` scanning
     deps.rb               # lockfile hash comparison, install commands
     names.rb              # friendly name generation (swift-falcon etc.)
-spec/
+test/
   vb/
-    pool_spec.rb
-    state_spec.rb
-    workspace_spec.rb
-    vm_spec.rb
-    process_spec.rb
-    deps_spec.rb
-    names_spec.rb
-  spec_helper.rb
+    pool_test.rb
+    state_test.rb
+    workspace_test.rb
+    vm_test.rb
+    process_test.rb
+    deps_test.rb
+    names_test.rb
+  helper.rb
 Gemfile
 vb.gemspec
 ```
@@ -64,11 +66,16 @@ Do not skip steps. Do not write tests after the fact. Do not write more than one
 
 ### Test tooling
 
-- **RSpec** for all tests
-- `bundle exec rspec` to run the full suite
-- `bundle exec rspec spec/vb/foo_spec.rb` to run a single file
+- **TLDR** (`https://github.com/tendersearls/tldr`) for all tests
+- `bundle exec tldr` to run the full suite
+- `bundle exec tldr test/vb/foo_test.rb` to run a single file
+- `bundle exec tldr test/vb/foo_test.rb:13` to run a test at a specific line
+- Tests inherit from `TLDR` base class with Minitest-style assertions (`assert`, `assert_equal`, `refute`, etc.)
+- Tests use `def test_*` method naming (not describe/it blocks)
+- `setup` and `teardown` methods for per-test hooks
 - Tests must not shell out to real `jj`, `vibe`, or `git` — use doubles/stubs
-- Integration tests (if any) are in `spec/integration/` and clearly marked
+- Test helper: `test/helper.rb` (auto-loaded by TLDR)
+- Integration tests (if any) are in `test/integration/` and clearly marked
 
 ### Code style
 

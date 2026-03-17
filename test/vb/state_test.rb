@@ -29,6 +29,28 @@ class VB::StateTest < TLDR
     assert_equal({}, result)
   end
 
+  def test_persists_data_across_calls
+    VB::State.with_lock(repo_root: @repo_root) { |s| s["foo"] = "bar" }
+    result = nil
+    VB::State.with_lock(repo_root: @repo_root) { |s| result = s["foo"] }
+    FileUtils.rm_rf(state_dir)
+    assert_equal "bar", result
+  end
+
+  def test_heals_missing_workspace_dirs
+    VB::State.with_lock(repo_root: @repo_root) do |s|
+      s["workspaces"] = {
+        "alive" => {"workspace_dir" => @tmpdir},
+        "dead" => {"workspace_dir" => "/nonexistent/path/xyz"}
+      }
+    end
+    result = nil
+    VB::State.with_lock(repo_root: @repo_root) { |s| result = s["workspaces"] }
+    FileUtils.rm_rf(state_dir)
+    assert result.key?("alive")
+    refute result.key?("dead")
+  end
+
   private
 
   def state_dir

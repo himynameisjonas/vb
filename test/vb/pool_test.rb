@@ -310,6 +310,120 @@ class VB::PoolTest < TLDR
     assert_nil state.dig("workspaces", "test-name", "pid"), "pid should be cleared after launch"
   end
 
+  def test_acquire_reuses_available_workspace_instead_of_creating_new
+    existing_dir = File.join(@repo_root, "existing-ws")
+    state = {"workspaces" => {
+      "existing-ws" => {
+        "workspace_dir" => existing_dir,
+        "disk_image" => "#{@repo_root}/.vibe/instance.raw"
+      }
+    }}
+
+    reset_called = false
+    add_called = false
+
+    fake_workspace = Object.new
+    fake_workspace.define_singleton_method(:dirty?) { false }
+    fake_workspace.define_singleton_method(:reset_to_latest) { reset_called = true }
+    fake_workspace.define_singleton_method(:add) { add_called = true }
+
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+
+    fake_process = Object.new
+    fake_process.define_singleton_method(:alive?) { |pid:| false }
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process }
+    )
+
+    returned_name = pool.acquire(send_cmd: "opencode")
+
+    assert_equal "existing-ws", returned_name, "should reuse existing workspace"
+    assert reset_called, "should call reset_to_latest on reused workspace"
+    refute add_called, "should NOT call add (no new workspace created)"
+  end
+
+  def test_acquire_skips_in_use_workspace_and_creates_new
+    existing_dir = File.join(@repo_root, "busy-ws")
+    state = {"workspaces" => {
+      "busy-ws" => {
+        "workspace_dir" => existing_dir,
+        "disk_image" => "#{@repo_root}/.vibe/instance.raw",
+        "pid" => Process.pid
+      }
+    }}
+
+    add_called = false
+    fake_workspace = Object.new
+    fake_workspace.define_singleton_method(:dirty?) { false }
+    fake_workspace.define_singleton_method(:reset_to_latest) {}
+    fake_workspace.define_singleton_method(:add) { add_called = true }
+
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+
+    fake_process = Object.new
+    fake_process.define_singleton_method(:alive?) { |pid:| pid == Process.pid }
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "fresh-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process }
+    )
+
+    returned_name = pool.acquire(send_cmd: "opencode")
+
+    assert_equal "fresh-ws", returned_name, "should create new workspace when existing is in-use"
+    assert add_called, "should call add for new workspace"
+  end
+
+  def test_acquire_skips_dirty_workspace_and_creates_new
+    existing_dir = File.join(@repo_root, "dirty-ws")
+    state = {"workspaces" => {
+      "dirty-ws" => {
+        "workspace_dir" => existing_dir,
+        "disk_image" => "#{@repo_root}/.vibe/instance.raw"
+      }
+    }}
+
+    add_called = false
+    fake_workspace = Object.new
+    fake_workspace.define_singleton_method(:dirty?) { true }
+    fake_workspace.define_singleton_method(:reset_to_latest) {}
+    fake_workspace.define_singleton_method(:add) { add_called = true }
+
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+
+    fake_process = Object.new
+    fake_process.define_singleton_method(:alive?) { |pid:| false }
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "clean-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process }
+    )
+
+    returned_name = pool.acquire(send_cmd: "opencode")
+
+    assert_equal "clean-ws", returned_name
+    assert add_called
+  end
+
   private
 
   def build_fake_state_class(state)

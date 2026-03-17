@@ -54,23 +54,41 @@ module VB
     end
 
     def acquire(send_cmd: "opencode")
-      name = @names_class.generate
-      parent_dir = File.dirname(@repo_root)
-      workspace_dir = File.join(parent_dir, "#{File.basename(@repo_root)}-#{name}")
-      disk_image = File.join(@repo_root, ".vibe", "instance.raw")
-
       vm = nil
+      name = nil
+
       @state_class.with_lock(repo_root: @repo_root) do |state|
         state["workspaces"] ||= {}
-        ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
-        ws.add
-        state["workspaces"][name] = {
-          "workspace_dir" => workspace_dir,
-          "disk_image" => disk_image,
-          "created_at" => Time.now.iso8601,
-          "pid" => ::Process.pid
-        }
-        vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: disk_image)
+        process = @process_factory.call
+
+        found = state["workspaces"].find do |_n, info|
+          pid = info["pid"]
+          not_in_use = pid.nil? || !process.alive?(pid: pid)
+          ws = @workspace_factory.call(workspace_dir: info["workspace_dir"], repo_root: @repo_root)
+          not_in_use && !ws.dirty?
+        end
+
+        if found
+          name, info = found
+          ws = @workspace_factory.call(workspace_dir: info["workspace_dir"], repo_root: @repo_root)
+          ws.reset_to_latest
+          info["pid"] = ::Process.pid
+          vm = @vm_factory.call(workspace_dir: info["workspace_dir"], disk_image: info["disk_image"])
+        else
+          name = @names_class.generate
+          parent_dir = File.dirname(@repo_root)
+          workspace_dir = File.join(parent_dir, "#{File.basename(@repo_root)}-#{name}")
+          disk_image = File.join(@repo_root, ".vibe", "instance.raw")
+          ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
+          ws.add
+          state["workspaces"][name] = {
+            "workspace_dir" => workspace_dir,
+            "disk_image" => disk_image,
+            "created_at" => Time.now.iso8601,
+            "pid" => ::Process.pid
+          }
+          vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: disk_image)
+        end
       end
 
       vm.launch(send_cmd: send_cmd)

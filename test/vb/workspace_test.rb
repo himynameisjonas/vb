@@ -31,17 +31,28 @@ class VB::WorkspaceTest < TLDR
   end
 
   def test_dirty_returns_true_when_changes_present
+    fake_ok = Object.new
+    def fake_ok.success? = true
     @workspace.define_singleton_method(:run_jj_capture) do |args, chdir: nil|
-      "Working copy changes:\nM foo.rb\n"
+      ["Working copy changes:\nM foo.rb\n", fake_ok]
     end
     assert @workspace.dirty?
   end
 
   def test_dirty_returns_false_when_no_changes
+    fake_ok = Object.new
+    def fake_ok.success? = true
     @workspace.define_singleton_method(:run_jj_capture) do |args, chdir: nil|
-      "The working copy has no changes.\n"
+      ["The working copy has no changes.\n", fake_ok]
     end
     refute @workspace.dirty?
+  end
+
+  def test_dirty_returns_true_when_jj_exits_nonzero
+    fake_status = Object.new
+    def fake_status.success? = false
+    @workspace.define_singleton_method(:run_jj_capture) { |args, chdir: nil| ["Error: no repo", fake_status] }
+    assert @workspace.dirty?
   end
 
   def test_reset_to_latest_calls_jj_edit_trunk

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "open3"
+
 module VB
   class Workspace
     def initialize(workspace_dir:, repo_root:)
@@ -18,7 +20,8 @@ module VB
     end
 
     def dirty?
-      output = run_jj_capture(["status"], chdir: @workspace_dir)
+      output, status = run_jj_capture(["status"], chdir: @workspace_dir)
+      return true unless status.success?  # fail closed: errors = dirty
       output.include?("Working copy changes:")
     end
 
@@ -34,7 +37,8 @@ module VB
     end
 
     def run_jj_capture(args, chdir: nil)
-      Dir.chdir(chdir || Dir.pwd) { `jj #{args.join(" ")}` }
+      dir = chdir || Dir.pwd
+      Open3.capture2e("jj", *args, chdir: dir)
     end
   end
 end

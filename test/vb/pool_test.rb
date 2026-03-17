@@ -48,10 +48,10 @@ class VB::PoolTest < TLDR
 
   def test_list_marks_in_use_workspace
     dir = @repo_root
-    @fake_state["workspaces"] = {"brave-hawk" => {"workspace_dir" => dir}}
+    @fake_state["workspaces"] = {"brave-hawk" => {"workspace_dir" => dir, "pid" => Process.pid}}
 
     fake_process = Object.new
-    fake_process.define_singleton_method(:in_use_dirs) { |workspace_dirs:| workspace_dirs }
+    fake_process.define_singleton_method(:alive?) { |pid:| pid == Process.pid }
     fake_workspace = Object.new
     def fake_workspace.dirty? = false
 
@@ -250,6 +250,64 @@ class VB::PoolTest < TLDR
     pool.acquire(send_cmd: "opencode")
 
     assert_equal [:state_written, :launch], call_log
+  end
+
+  def test_list_shows_in_use_when_pid_is_alive
+    state = {"workspaces" => {
+      "swift-falcon" => {"workspace_dir" => @repo_root, "pid" => Process.pid}
+    }}
+    fake_workspace = Object.new
+    def fake_workspace.dirty? = false
+    fake_process = Object.new
+    fake_process.define_singleton_method(:alive?) { |pid:| pid == Process.pid }
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      workspace_factory: ->(**) { fake_workspace },
+      process_factory: ->(*) { fake_process }
+    )
+    result = pool.list
+    assert result[0][:in_use]
+  end
+
+  def test_list_shows_available_when_pid_is_gone
+    state = {"workspaces" => {
+      "swift-falcon" => {"workspace_dir" => @repo_root, "pid" => 999999999}
+    }}
+    fake_workspace = Object.new
+    def fake_workspace.dirty? = false
+    fake_process = Object.new
+    fake_process.define_singleton_method(:alive?) { |pid:| false }
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      workspace_factory: ->(**) { fake_workspace },
+      process_factory: ->(*) { fake_process }
+    )
+    result = pool.list
+    refute result[0][:in_use]
+  end
+
+  def test_acquire_stores_pid_in_state_then_clears_after_launch
+    state = {}
+    captured = {}
+    fake_workspace = Object.new
+    def fake_workspace.add
+    end
+    fake_vm = Object.new
+    fake_vm.define_singleton_method(:launch) do |send_cmd:|
+      captured[:pid_during_launch] = state.dig("workspaces")&.values&.first&.fetch("pid", nil)
+    end
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "test-name" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm }
+    )
+    pool.acquire
+    assert_equal Process.pid, captured[:pid_during_launch], "pid should be stored before launch"
+    assert_nil state.dig("workspaces", "test-name", "pid"), "pid should be cleared after launch"
   end
 
   private

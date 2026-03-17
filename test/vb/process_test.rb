@@ -34,4 +34,12 @@ class VB::ProcessTest < TLDR
     result = process.in_use_dirs(workspace_dirs: ["/repo-alpha", "/repo-beta"])
     assert_equal [], result
   end
+
+  def test_alive_returns_true_for_current_process
+    assert VB::Process.new.alive?(pid: Process.pid)
+  end
+
+  def test_alive_returns_false_for_dead_pid
+    refute VB::Process.new.alive?(pid: 999999999)
+  end
 end

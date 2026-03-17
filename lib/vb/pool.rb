@@ -25,16 +25,16 @@ module VB
     def list
       @state_class.with_lock(repo_root: @repo_root, write: false) do |state|
         workspaces = state["workspaces"] || {}
-        dirs = workspaces.values.map { |v| v["workspace_dir"] }
         process = @process_factory.call
-        in_use_dirs = process.in_use_dirs(workspace_dirs: dirs)
 
         workspaces.map do |name, info|
           ws = @workspace_factory.call(workspace_dir: info["workspace_dir"], repo_root: @repo_root)
+          pid = info["pid"]
+          in_use = pid ? process.alive?(pid: pid) : false
           {
             name: name,
             workspace_dir: info["workspace_dir"],
-            in_use: in_use_dirs.include?(info["workspace_dir"]),
+            in_use: in_use,
             dirty: ws.dirty?
           }
         end
@@ -67,11 +67,18 @@ module VB
         state["workspaces"][name] = {
           "workspace_dir" => workspace_dir,
           "disk_image" => disk_image,
-          "created_at" => Time.now.iso8601
+          "created_at" => Time.now.iso8601,
+          "pid" => ::Process.pid
         }
         vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: disk_image)
       end
+
       vm.launch(send_cmd: send_cmd)
+
+      @state_class.with_lock(repo_root: @repo_root) do |state|
+        state.dig("workspaces", name)&.delete("pid")
+      end
+
       name
     end
 

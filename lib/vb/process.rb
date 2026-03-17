@@ -11,6 +11,13 @@ module VB
       workspace_dirs.select { |dir| output.include?(dir) }
     end
 
+    def alive?(pid:)
+      ::Process.kill(0, Integer(pid))
+      true
+    rescue Errno::ESRCH, Errno::EPERM
+      false
+    end
+
     private
 
     def ps_output

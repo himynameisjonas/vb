@@ -61,11 +61,11 @@ class VB::WorkspaceTest < TLDR
     assert @workspace.dirty?
   end
 
-  def test_reset_to_latest_calls_jj_edit_trunk
+  def test_reset_to_latest_calls_jj_new_trunk_revset
     @workspace.reset_to_latest
     assert_equal 1, @jj_calls.length
-    assert_includes @jj_calls[0][:args], "edit"
-    assert_includes @jj_calls[0][:args], "trunk"
+    assert_includes @jj_calls[0][:args], "new"
+    assert_includes @jj_calls[0][:args], "trunk()"
   end
 
   def test_add_passes_name_flag_when_provided

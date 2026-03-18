@@ -28,7 +28,7 @@ module VB
     end
 
     def reset_to_latest
-      run_jj(["edit", "trunk"], chdir: @workspace_dir)
+      run_jj(["new", "trunk()"], chdir: @workspace_dir)
     end
 
     private

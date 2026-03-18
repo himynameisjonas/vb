@@ -13,7 +13,7 @@ module VB
     def launch(send_cmd:)
       Dir.mktmpdir do |config_dir|
         populate_config(config_dir)
-        run_vibe(args_for(send_cmd: send_cmd, config_dir: config_dir))
+        run_vibe(args_for(send_cmd: send_cmd, config_dir: config_dir), chdir: @workspace_dir)
       end
     end
 
@@ -53,8 +53,9 @@ module VB
       parts.join(" && ")
     end
 
-    def run_vibe(args)
-      system("vibe", *args)
+    def run_vibe(args, chdir: nil)
+      opts = chdir ? {chdir: chdir} : {}
+      system("vibe", *args, **opts)
     end
   end
 end

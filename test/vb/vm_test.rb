@@ -43,7 +43,7 @@ class VB::VMTest < TLDR
 
   def test_launch_calls_run_vibe
     vibe_args = nil
-    @vm.define_singleton_method(:run_vibe) { |args| vibe_args = args }
+    @vm.define_singleton_method(:run_vibe) { |args, chdir: nil| vibe_args = args }
     @vm.launch(send_cmd: "opencode")
     assert_equal Array, vibe_args.class
     assert vibe_args.any? { |a| a.include?("opencode") }
@@ -51,7 +51,7 @@ class VB::VMTest < TLDR
 
   def test_launch_cleans_up_tmpdir
     captured_config_dir = nil
-    @vm.define_singleton_method(:run_vibe) do |args|
+    @vm.define_singleton_method(:run_vibe) do |args, chdir: nil|
       mount_arg = args.find { |a| a.include?(":/mnt/claude-config:read-only") }
       captured_config_dir = mount_arg.split(":").first
     end
@@ -83,8 +83,15 @@ class VB::VMTest < TLDR
   def test_launch_populates_config_dir
     populated = {}
     @vm.define_singleton_method(:populate_config) { |dir| populated[:called] = dir }
-    @vm.define_singleton_method(:run_vibe) { |args| }
+    @vm.define_singleton_method(:run_vibe) { |args, chdir: nil| }
     @vm.launch(send_cmd: "test")
     refute_nil populated[:called]
+  end
+
+  def test_run_vibe_executes_from_workspace_dir
+    called_args = nil
+    @vm.define_singleton_method(:run_vibe) { |args, chdir: nil| called_args = {args: args, chdir: chdir} }
+    @vm.launch(send_cmd: "test")
+    assert_equal "/repos/myrepo-swift-falcon", called_args[:chdir]
   end
 end

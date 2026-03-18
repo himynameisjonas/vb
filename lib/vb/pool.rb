@@ -82,14 +82,14 @@ module VB
           parent_dir = File.dirname(@repo_root)
           workspace_dir = File.join(parent_dir, "#{File.basename(@repo_root)}-#{name}")
 
+          ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
+          ws.add
+
           src_disk = File.join(@repo_root, ".vibe", "instance.raw")
           dst_dir = File.join(workspace_dir, ".vibe")
           dst_disk = File.join(dst_dir, "instance.raw")
           FileUtils.mkdir_p(dst_dir)
           copy_disk(src_disk, dst_disk)
-
-          ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
-          ws.add
           state["workspaces"][name] = {
             "workspace_dir" => workspace_dir,
             "disk_image" => dst_disk,

@@ -555,6 +555,32 @@ class VB::PoolTest < TLDR
     assert_equal "opencode", launched_cmd
   end
 
+  def test_acquire_calls_add_before_copy_disk
+    call_log = []
+    state = {}
+    fake_workspace = Object.new
+    fake_workspace.define_singleton_method(:add) { call_log << :add }
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "order-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      deps_factory: ->(**) { fake_deps }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| call_log << :copy_disk }
+
+    pool.acquire
+    assert_equal [:add, :copy_disk], call_log,
+      "jj workspace add must run before copy_disk — jj creates the directory, then we copy into it"
+  end
+
   private
 
   def build_fake_state_class(state)

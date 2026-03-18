@@ -12,11 +12,6 @@ module VB
       end
     end
 
-    TOOL_COMMANDS = {
-      "claude" => "claude --dangerously-skip-permissions",
-      "opencode" => "opencode"
-    }.freeze
-
     default_command :acquire
 
     desc "acquire", "Acquire a workspace and launch vibe (bare shell)"
@@ -31,7 +26,7 @@ module VB
 
     desc "claude", "Acquire a workspace and launch claude"
     def claude
-      run_acquire(TOOL_COMMANDS["claude"])
+      run_acquire("claude --dangerously-skip-permissions")
     end
 
     desc "status", "Show all workspaces"

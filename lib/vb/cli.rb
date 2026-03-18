@@ -14,9 +14,9 @@ module VB
 
     default_command :acquire
 
-    desc "acquire", "Acquire a workspace and launch vibe (bare shell)"
+    desc "acquire", "Acquire a workspace and drop to shell"
     def acquire
-      run_acquire("bash")
+      run_acquire(nil)
     end
 
     desc "opencode", "Acquire a workspace and launch opencode"

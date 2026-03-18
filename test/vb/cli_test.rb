@@ -52,12 +52,12 @@ class VB::CLITest < TLDR
 
   def test_default_with_no_args_drops_to_shell
     acquired = []
-    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: nil, resume_cmd: nil|
       acquired << send_cmd
       {name: "swift-falcon", resumed: false}
     }
     capture_output { VB::CLI.start([]) }
-    assert_equal ["bash"], acquired
+    assert_equal [nil], acquired
   end
 
   def test_opencode_command

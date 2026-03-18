@@ -49,6 +49,7 @@ module VB
       parts << "cd #{@workspace_dir}"
       parts << '{ command -v jj >/dev/null || { _jj_tmp=$(mktemp -d) && mise install-into jujutsu@latest "$_jj_tmp" && cp "$_jj_tmp/jj" /root/.local/bin/jj && rm -rf "$_jj_tmp"; }; }'
       parts << "{ command -v opencode >/dev/null || npm install -g opencode-ai 2>/dev/null; true; }"
+      parts << "printf \"alias c='claude --dangerously-skip-permissions'\\nalias o='opencode'\\n\" > /root/.vb-aliases.sh && grep -qF '.vb-aliases.sh' /root/.bashrc || echo 'source /root/.vb-aliases.sh' >> /root/.bashrc"
       parts << send_cmd
       parts.join(" && ")
     end

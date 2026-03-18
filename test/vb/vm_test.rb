@@ -94,4 +94,13 @@ class VB::VMTest < TLDR
     @vm.launch(send_cmd: "test")
     assert_equal "/repos/myrepo-swift-falcon", called_args[:chdir]
   end
+
+  def test_init_cmd_sets_up_shell_aliases
+    args = @vm.args_for(send_cmd: "bash", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+    assert_includes last_send, "alias c="
+    assert_includes last_send, "alias o="
+    assert_includes last_send, ".vb-aliases.sh"
+  end
 end

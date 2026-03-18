@@ -50,14 +50,35 @@ class VB::CLITest < TLDR
     assert called
   end
 
-  def test_default_calls_pool_acquire
+  def test_default_with_no_args_drops_to_shell
     acquired = []
-    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "opencode"|
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash"|
       acquired << send_cmd
       "swift-falcon"
     }
-    out = capture_output { VB::CLI.start([]) }
-    assert_includes acquired, "opencode"
+    capture_output { VB::CLI.start([]) }
+    assert_equal ["bash"], acquired
+  end
+
+  def test_opencode_command
+    acquired = []
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash"|
+      acquired << send_cmd
+      "swift-falcon"
+    }
+    out = capture_output { VB::CLI.start(["opencode"]) }
+    assert_equal ["opencode"], acquired
+    assert_includes out, "swift-falcon"
+  end
+
+  def test_claude_command_adds_skip_permissions
+    acquired = []
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash"|
+      acquired << send_cmd
+      "swift-falcon"
+    }
+    out = capture_output { VB::CLI.start(["claude"]) }
+    assert_equal ["claude --dangerously-skip-permissions"], acquired
     assert_includes out, "swift-falcon"
   end
 

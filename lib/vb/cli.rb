@@ -12,13 +12,26 @@ module VB
       end
     end
 
+    TOOL_COMMANDS = {
+      "claude" => "claude --dangerously-skip-permissions",
+      "opencode" => "opencode"
+    }.freeze
+
     default_command :acquire
 
-    desc "acquire", "Acquire a workspace and launch vibe"
+    desc "acquire", "Acquire a workspace and launch vibe (bare shell)"
     def acquire
-      pool = self.class.pool_factory.call(repo_root: Dir.pwd)
-      name = pool.acquire(send_cmd: "opencode")
-      puts "Workspace: #{name}"
+      run_acquire("bash")
+    end
+
+    desc "opencode", "Acquire a workspace and launch opencode"
+    def opencode
+      run_acquire("opencode")
+    end
+
+    desc "claude", "Acquire a workspace and launch claude"
+    def claude
+      run_acquire(TOOL_COMMANDS["claude"])
     end
 
     desc "status", "Show all workspaces"
@@ -33,6 +46,14 @@ module VB
           dirty_status = ws[:dirty] ? "dirty" : "clean"
           puts "#{ws[:name]}  #{ws[:workspace_dir]}  #{use_status}  #{dirty_status}"
         end
+      end
+    end
+
+    no_commands do
+      def run_acquire(send_cmd)
+        pool = self.class.pool_factory.call(repo_root: Dir.pwd)
+        name = pool.acquire(send_cmd: send_cmd)
+        puts "Workspace: #{name}"
       end
     end
 

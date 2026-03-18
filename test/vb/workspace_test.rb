@@ -67,4 +67,15 @@ class VB::WorkspaceTest < TLDR
     assert_includes @jj_calls[0][:args], "edit"
     assert_includes @jj_calls[0][:args], "trunk"
   end
+
+  def test_add_passes_name_flag_when_provided
+    @workspace.add(name: "swift-falcon")
+    assert_includes @jj_calls[0][:args], "--name"
+    assert_includes @jj_calls[0][:args], "swift-falcon"
+  end
+
+  def test_add_omits_name_flag_when_nil
+    @workspace.add
+    refute @jj_calls[0][:args].include?("--name")
+  end
 end

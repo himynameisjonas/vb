@@ -9,8 +9,10 @@ module VB
       @repo_root = repo_root
     end
 
-    def add
-      run_jj(["workspace", "add", @workspace_dir], chdir: @repo_root)
+    def add(name: nil)
+      args = ["workspace", "add", @workspace_dir]
+      args.push("--name", name) if name
+      run_jj(args, chdir: @repo_root)
     end
 
     def forget

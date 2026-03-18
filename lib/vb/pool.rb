@@ -83,13 +83,14 @@ module VB
           workspace_dir = File.join(parent_dir, "#{File.basename(@repo_root)}-#{name}")
 
           ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
-          ws.add
+          ws.add(name: name)
 
           src_disk = File.join(@repo_root, ".vibe", "instance.raw")
           dst_dir = File.join(workspace_dir, ".vibe")
           dst_disk = File.join(dst_dir, "instance.raw")
           FileUtils.mkdir_p(dst_dir)
           copy_disk(src_disk, dst_disk)
+          copy_repo_configs(workspace_dir)
           state["workspaces"][name] = {
             "workspace_dir" => workspace_dir,
             "disk_image" => dst_disk,
@@ -117,6 +118,18 @@ module VB
 
     def copy_disk(src, dst)
       system("cp", "-c", src, dst)
+    end
+
+    def copy_repo_configs(workspace_dir)
+      src = File.join(@repo_root, ".claude", "settings.local.json")
+      if File.exist?(src)
+        dst_dir = File.join(workspace_dir, ".claude")
+        FileUtils.mkdir_p(dst_dir)
+        FileUtils.cp(src, File.join(dst_dir, "settings.local.json"))
+      end
+
+      src = File.join(@repo_root, ".env.development")
+      FileUtils.cp(src, File.join(workspace_dir, ".env.development")) if File.exist?(src)
     end
 
     def _destroy(name:, state:)

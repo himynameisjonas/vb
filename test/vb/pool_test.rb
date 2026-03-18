@@ -143,7 +143,7 @@ class VB::PoolTest < TLDR
 
   def test_acquire_returns_workspace_name
     fake_workspace = Object.new
-    def fake_workspace.add = nil
+    def fake_workspace.add(name: nil) = nil
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:) = nil
     fake_names_class = Class.new do
@@ -165,7 +165,7 @@ class VB::PoolTest < TLDR
 
   def test_acquire_persists_workspace_to_state
     fake_workspace = Object.new
-    def fake_workspace.add = nil
+    def fake_workspace.add(name: nil) = nil
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:) = nil
     fake_names_class = Class.new do
@@ -189,7 +189,7 @@ class VB::PoolTest < TLDR
   def test_acquire_calls_workspace_add
     add_called = false
     fake_workspace = Object.new
-    fake_workspace.define_singleton_method(:add) { add_called = true }
+    fake_workspace.define_singleton_method(:add) { |name: nil| add_called = true }
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:) = nil
     fake_names_class = Class.new do
@@ -212,7 +212,7 @@ class VB::PoolTest < TLDR
   def test_acquire_calls_vm_launch_with_send_cmd
     launched_with = nil
     fake_workspace = Object.new
-    def fake_workspace.add = nil
+    def fake_workspace.add(name: nil) = nil
     fake_vm = Object.new
     fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_with = send_cmd }
     fake_names_class = Class.new do
@@ -235,7 +235,7 @@ class VB::PoolTest < TLDR
   def test_acquire_writes_state_before_launching_vm
     call_log = []
     fake_workspace = Object.new
-    def fake_workspace.add
+    def fake_workspace.add(name: nil)
     end
     fake_vm = Object.new
     fake_vm.define_singleton_method(:launch) { |send_cmd:| call_log << :launch }
@@ -297,7 +297,7 @@ class VB::PoolTest < TLDR
     state = {}
     captured = {}
     fake_workspace = Object.new
-    def fake_workspace.add
+    def fake_workspace.add(name: nil)
     end
     fake_vm = Object.new
     fake_vm.define_singleton_method(:launch) do |send_cmd:|
@@ -331,7 +331,7 @@ class VB::PoolTest < TLDR
     fake_workspace = Object.new
     fake_workspace.define_singleton_method(:dirty?) { false }
     fake_workspace.define_singleton_method(:reset_to_latest) { reset_called = true }
-    fake_workspace.define_singleton_method(:add) { add_called = true }
+    fake_workspace.define_singleton_method(:add) { |name: nil| add_called = true }
 
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
@@ -369,7 +369,7 @@ class VB::PoolTest < TLDR
     fake_workspace = Object.new
     fake_workspace.define_singleton_method(:dirty?) { false }
     fake_workspace.define_singleton_method(:reset_to_latest) {}
-    fake_workspace.define_singleton_method(:add) { add_called = true }
+    fake_workspace.define_singleton_method(:add) { |name: nil| add_called = true }
 
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
@@ -407,7 +407,7 @@ class VB::PoolTest < TLDR
     fake_workspace = Object.new
     fake_workspace.define_singleton_method(:dirty?) { true }
     fake_workspace.define_singleton_method(:reset_to_latest) {}
-    fake_workspace.define_singleton_method(:add) { add_called = true }
+    fake_workspace.define_singleton_method(:add) { |name: nil| add_called = true }
 
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
@@ -452,7 +452,7 @@ class VB::PoolTest < TLDR
     end
 
     fake_workspace = Object.new
-    def fake_workspace.add
+    def fake_workspace.add(name: nil)
     end
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
@@ -479,7 +479,7 @@ class VB::PoolTest < TLDR
     state = {}
     copied = {}
     fake_workspace = Object.new
-    def fake_workspace.add
+    def fake_workspace.add(name: nil)
     end
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
@@ -509,7 +509,7 @@ class VB::PoolTest < TLDR
     state = {}
     launched_cmd = nil
     fake_workspace = Object.new
-    def fake_workspace.add
+    def fake_workspace.add(name: nil)
     end
     fake_vm = Object.new
     fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
@@ -534,7 +534,7 @@ class VB::PoolTest < TLDR
     state = {}
     launched_cmd = nil
     fake_workspace = Object.new
-    def fake_workspace.add
+    def fake_workspace.add(name: nil)
     end
     fake_vm = Object.new
     fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
@@ -559,7 +559,7 @@ class VB::PoolTest < TLDR
     call_log = []
     state = {}
     fake_workspace = Object.new
-    fake_workspace.define_singleton_method(:add) { call_log << :add }
+    fake_workspace.define_singleton_method(:add) { |name: nil| call_log << :add }
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
     end
@@ -579,6 +579,33 @@ class VB::PoolTest < TLDR
     pool.acquire
     assert_equal [:add, :copy_disk], call_log,
       "jj workspace add must run before copy_disk — jj creates the directory, then we copy into it"
+  end
+
+  def test_acquire_passes_name_to_workspace_add
+    state = {}
+    add_args = nil
+    fake_workspace = Object.new
+    fake_workspace.define_singleton_method(:add) { |name: nil| add_args = {name: name} }
+    fake_workspace.define_singleton_method(:dirty?) { false }
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "cool-owl" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      deps_factory: ->(**) { fake_deps }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+    pool.define_singleton_method(:copy_repo_configs) { |dir| }
+
+    pool.acquire
+    assert_equal "cool-owl", add_args[:name]
   end
 
   private

@@ -31,7 +31,7 @@ class VB::VMTest < TLDR
     assert_equal 2, expect_indices.length
     assert_equal 2, send_indices.length
     last_send_idx = send_indices.last
-    assert_equal "my_cmd", args[last_send_idx + 1]
+    assert args[last_send_idx + 1].end_with?("my_cmd")
   end
 
   def test_args_first_send_is_bash_login
@@ -57,5 +57,34 @@ class VB::VMTest < TLDR
     end
     @vm.launch(send_cmd: "test")
     refute Dir.exist?(captured_config_dir), "Temp dir should be cleaned up after launch"
+  end
+
+  def test_args_includes_cd_into_workspace_dir
+    args = @vm.args_for(send_cmd: "opencode", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+    assert_includes last_send, "cd /repos/myrepo-swift-falcon"
+  end
+
+  def test_args_includes_jj_install_check
+    args = @vm.args_for(send_cmd: "opencode", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+    assert_includes last_send, "command -v jj"
+  end
+
+  def test_args_init_cmd_ends_with_send_cmd
+    args = @vm.args_for(send_cmd: "myeditor", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+    assert last_send.end_with?("myeditor")
+  end
+
+  def test_launch_populates_config_dir
+    populated = {}
+    @vm.define_singleton_method(:populate_config) { |dir| populated[:called] = dir }
+    @vm.define_singleton_method(:run_vibe) { |args| }
+    @vm.launch(send_cmd: "test")
+    refute_nil populated[:called]
   end
 end

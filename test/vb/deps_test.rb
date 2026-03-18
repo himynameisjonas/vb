@@ -46,4 +46,38 @@ class VB::DepsTest < TLDR
     File.write(File.join(@repo_dir, "pnpm-lock.yaml"), "new")
     assert_includes @deps.install_commands, "pnpm install"
   end
+
+  def test_detects_stale_lockfile_in_subdirectory
+    subdir = File.join(@repo_dir, "ember_app")
+    ws_subdir = File.join(@workspace_dir, "ember_app")
+    FileUtils.mkdir_p(subdir)
+    FileUtils.mkdir_p(ws_subdir)
+    File.write(File.join(subdir, "pnpm-lock.yaml"), "new")
+    File.write(File.join(ws_subdir, "pnpm-lock.yaml"), "old")
+    assert_includes @deps.stale_lockfiles, "ember_app/pnpm-lock.yaml"
+  end
+
+  def test_install_command_for_subdirectory_lockfile
+    subdir = File.join(@repo_dir, "ember_app")
+    FileUtils.mkdir_p(subdir)
+    File.write(File.join(subdir, "pnpm-lock.yaml"), "content")
+    assert_includes @deps.install_commands, "cd ember_app && pnpm install"
+  end
+
+  def test_identical_subdir_lockfile_is_not_stale
+    subdir = File.join(@repo_dir, "ember_app")
+    ws_subdir = File.join(@workspace_dir, "ember_app")
+    FileUtils.mkdir_p(subdir)
+    FileUtils.mkdir_p(ws_subdir)
+    File.write(File.join(subdir, "pnpm-lock.yaml"), "same")
+    File.write(File.join(ws_subdir, "pnpm-lock.yaml"), "same")
+    refute_includes @deps.stale_lockfiles, "ember_app/pnpm-lock.yaml"
+  end
+
+  def test_does_not_scan_deeper_than_one_level
+    deep = File.join(@repo_dir, "a", "b")
+    FileUtils.mkdir_p(deep)
+    File.write(File.join(deep, "Gemfile.lock"), "content")
+    assert @deps.up_to_date?
+  end
 end

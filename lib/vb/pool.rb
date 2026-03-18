@@ -56,6 +56,7 @@ module VB
     def acquire(send_cmd: "opencode")
       vm = nil
       name = nil
+      workspace_dir = nil
 
       @state_class.with_lock(repo_root: @repo_root) do |state|
         state["workspaces"] ||= {}
@@ -70,26 +71,38 @@ module VB
 
         if found
           name, info = found
-          ws = @workspace_factory.call(workspace_dir: info["workspace_dir"], repo_root: @repo_root)
+          workspace_dir = info["workspace_dir"]
+          ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
           ws.reset_to_latest
           info["pid"] = ::Process.pid
-          vm = @vm_factory.call(workspace_dir: info["workspace_dir"], disk_image: info["disk_image"])
+          vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: info["disk_image"])
         else
           name = @names_class.generate
+          name = @names_class.generate while state["workspaces"].key?(name)
           parent_dir = File.dirname(@repo_root)
           workspace_dir = File.join(parent_dir, "#{File.basename(@repo_root)}-#{name}")
-          disk_image = File.join(@repo_root, ".vibe", "instance.raw")
+
+          src_disk = File.join(@repo_root, ".vibe", "instance.raw")
+          dst_dir = File.join(workspace_dir, ".vibe")
+          dst_disk = File.join(dst_dir, "instance.raw")
+          FileUtils.mkdir_p(dst_dir)
+          copy_disk(src_disk, dst_disk)
+
           ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
           ws.add
           state["workspaces"][name] = {
             "workspace_dir" => workspace_dir,
-            "disk_image" => disk_image,
+            "disk_image" => dst_disk,
             "created_at" => Time.now.iso8601,
             "pid" => ::Process.pid
           }
-          vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: disk_image)
+          vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: dst_disk)
         end
       end
+
+      deps = @deps_factory.call(repo_root: @repo_root, workspace_dir: workspace_dir)
+      cmds = deps.install_commands
+      send_cmd = "#{cmds.join(" && ")} && #{send_cmd}" unless cmds.empty?
 
       vm.launch(send_cmd: send_cmd)
 
@@ -101,6 +114,10 @@ module VB
     end
 
     private
+
+    def copy_disk(src, dst)
+      system("cp", "-c", src, dst)
+    end
 
     def _destroy(name:, state:)
       workspaces = state["workspaces"] || {}

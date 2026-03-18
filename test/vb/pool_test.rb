@@ -157,6 +157,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
     @fake_state["workspaces"] = {}
     name = pool.acquire
     assert_equal "fast-gecko", name
@@ -178,6 +179,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
     @fake_state["workspaces"] = {}
     pool.acquire
     assert @fake_state["workspaces"].key?("light-crane")
@@ -201,6 +203,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
     @fake_state["workspaces"] = {}
     pool.acquire
     assert add_called
@@ -223,6 +226,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
     @fake_state["workspaces"] = {}
     pool.acquire(send_cmd: "myeditor")
     assert_equal "myeditor", launched_with
@@ -247,6 +251,7 @@ class VB::PoolTest < TLDR
         fake_vm
       end
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
     pool.acquire(send_cmd: "opencode")
 
     assert_equal [:state_written, :launch], call_log
@@ -305,6 +310,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
     pool.acquire
     assert_equal Process.pid, captured[:pid_during_launch], "pid should be stored before launch"
     assert_nil state.dig("workspaces", "test-name", "pid"), "pid should be cleared after launch"
@@ -380,6 +386,7 @@ class VB::PoolTest < TLDR
       vm_factory: ->(**) { fake_vm },
       process_factory: ->(*) { fake_process }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
 
     returned_name = pool.acquire(send_cmd: "opencode")
 
@@ -417,11 +424,135 @@ class VB::PoolTest < TLDR
       vm_factory: ->(**) { fake_vm },
       process_factory: ->(*) { fake_process }
     )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
 
     returned_name = pool.acquire(send_cmd: "opencode")
 
     assert_equal "clean-ws", returned_name
     assert add_called
+  end
+
+  def test_acquire_avoids_name_collision
+    state = {
+      "workspaces" => {
+        "first-name" => {
+          "workspace_dir" => "/tmp/ws1",
+          "disk_image" => "/tmp/d1",
+          "pid" => Process.pid
+        }
+      }
+    }
+
+    call_count = 0
+    fake_names = Class.new do
+      define_singleton_method(:generate) do
+        call_count += 1
+        (call_count == 1) ? "first-name" : "second-name"
+      end
+    end
+
+    fake_workspace = Object.new
+    def fake_workspace.add
+    end
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+    fake_process = Object.new
+    fake_process.define_singleton_method(:alive?) { |pid:| pid == Process.pid }
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: fake_names,
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process },
+      deps_factory: ->(**) { Object.new.tap { |o| def o.install_commands = [] } }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+
+    name = pool.acquire
+    assert_equal "second-name", name
+  end
+
+  def test_acquire_copies_disk_image_to_workspace
+    state = {}
+    copied = {}
+    fake_workspace = Object.new
+    def fake_workspace.add
+    end
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "test-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      deps_factory: ->(**) { Object.new.tap { |o| def o.install_commands = [] } }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst|
+      copied[:src] = src
+      copied[:dst] = dst
+    }
+
+    pool.acquire
+    assert_equal File.join(@repo_root, ".vibe", "instance.raw"), copied[:src]
+    assert copied[:dst].include?("test-ws"), "dst should be in workspace dir"
+    assert copied[:dst].end_with?(".vibe/instance.raw")
+    assert state["workspaces"]["test-ws"]["disk_image"].include?("test-ws")
+  end
+
+  def test_acquire_prepends_dep_install_commands_to_send_cmd
+    state = {}
+    launched_cmd = nil
+    fake_workspace = Object.new
+    def fake_workspace.add
+    end
+    fake_vm = Object.new
+    fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
+    fake_deps = Object.new
+    fake_deps.define_singleton_method(:install_commands) { ["bundle install", "cd ember_app && pnpm install"] }
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "dep-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      deps_factory: ->(**) { fake_deps }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+
+    pool.acquire(send_cmd: "opencode")
+    assert_equal "bundle install && cd ember_app && pnpm install && opencode", launched_cmd
+  end
+
+  def test_acquire_does_not_modify_send_cmd_when_deps_up_to_date
+    state = {}
+    launched_cmd = nil
+    fake_workspace = Object.new
+    def fake_workspace.add
+    end
+    fake_vm = Object.new
+    fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "clean-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      deps_factory: ->(**) { fake_deps }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+
+    pool.acquire(send_cmd: "opencode")
+    assert_equal "opencode", launched_cmd
   end
 
   private

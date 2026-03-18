@@ -26,7 +26,10 @@ module VB
 
     desc "claude", "Acquire a workspace and launch claude"
     def claude
-      run_acquire("claude --dangerously-skip-permissions")
+      run_acquire(
+        "claude --dangerously-skip-permissions",
+        resume_cmd: "claude --continue --dangerously-skip-permissions"
+      )
     end
 
     desc "status", "Show all workspaces"
@@ -45,10 +48,11 @@ module VB
     end
 
     no_commands do
-      def run_acquire(send_cmd)
+      def run_acquire(send_cmd, resume_cmd: nil)
         pool = self.class.pool_factory.call(repo_root: Dir.pwd)
-        name = pool.acquire(send_cmd: send_cmd)
-        puts "Workspace: #{name}"
+        result = pool.acquire(send_cmd: send_cmd, resume_cmd: resume_cmd)
+        action = result[:resumed] ? "Resuming" : "Creating"
+        puts "#{action} workspace: #{result[:name]}"
       end
     end
 

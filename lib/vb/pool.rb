@@ -53,10 +53,11 @@ module VB
       end
     end
 
-    def acquire(send_cmd: "opencode")
+    def acquire(send_cmd: "opencode", resume_cmd: nil)
       vm = nil
       name = nil
       workspace_dir = nil
+      resumed = false
 
       @state_class.with_lock(repo_root: @repo_root) do |state|
         state["workspaces"] ||= {}
@@ -76,6 +77,7 @@ module VB
           ws.reset_to_latest
           info["pid"] = ::Process.pid
           vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: info["disk_image"])
+          resumed = true
         else
           name = @names_class.generate
           name = @names_class.generate while state["workspaces"].key?(name)
@@ -103,15 +105,16 @@ module VB
 
       deps = @deps_factory.call(repo_root: @repo_root, workspace_dir: workspace_dir)
       cmds = deps.install_commands
-      send_cmd = "#{cmds.join(" && ")} && #{send_cmd}" unless cmds.empty?
+      effective_cmd = (resumed && resume_cmd) ? resume_cmd : send_cmd
+      effective_cmd = "#{cmds.join(" && ")} && #{effective_cmd}" unless cmds.empty?
 
-      vm.launch(send_cmd: send_cmd)
+      vm.launch(send_cmd: effective_cmd)
 
       @state_class.with_lock(repo_root: @repo_root) do |state|
         state.dig("workspaces", name)&.delete("pid")
       end
 
-      name
+      {name: name, resumed: resumed}
     end
 
     private

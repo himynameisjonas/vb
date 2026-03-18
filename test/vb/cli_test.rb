@@ -52,9 +52,9 @@ class VB::CLITest < TLDR
 
   def test_default_with_no_args_drops_to_shell
     acquired = []
-    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash"|
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
       acquired << send_cmd
-      "swift-falcon"
+      {name: "swift-falcon", resumed: false}
     }
     capture_output { VB::CLI.start([]) }
     assert_equal ["bash"], acquired
@@ -62,9 +62,9 @@ class VB::CLITest < TLDR
 
   def test_opencode_command
     acquired = []
-    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash"|
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
       acquired << send_cmd
-      "swift-falcon"
+      {name: "swift-falcon", resumed: false}
     }
     out = capture_output { VB::CLI.start(["opencode"]) }
     assert_equal ["opencode"], acquired
@@ -73,13 +73,39 @@ class VB::CLITest < TLDR
 
   def test_claude_command_adds_skip_permissions
     acquired = []
-    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash"|
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
       acquired << send_cmd
-      "swift-falcon"
+      {name: "swift-falcon", resumed: false}
     }
     out = capture_output { VB::CLI.start(["claude"]) }
     assert_equal ["claude --dangerously-skip-permissions"], acquired
     assert_includes out, "swift-falcon"
+  end
+
+  def test_acquire_prints_creating_for_new_workspace
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
+      {name: "swift-falcon", resumed: false}
+    }
+    out = capture_output { VB::CLI.start([]) }
+    assert_includes out, "Creating workspace: swift-falcon"
+  end
+
+  def test_acquire_prints_resuming_for_existing_workspace
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
+      {name: "brave-hawk", resumed: true}
+    }
+    out = capture_output { VB::CLI.start([]) }
+    assert_includes out, "Resuming workspace: brave-hawk"
+  end
+
+  def test_claude_passes_continue_as_resume_cmd
+    acquired_resume_cmd = nil
+    @fake_pool.define_singleton_method(:acquire) { |send_cmd: "bash", resume_cmd: nil|
+      acquired_resume_cmd = resume_cmd
+      {name: "swift-falcon", resumed: true}
+    }
+    capture_output { VB::CLI.start(["claude"]) }
+    assert_includes acquired_resume_cmd, "--continue"
   end
 
   private

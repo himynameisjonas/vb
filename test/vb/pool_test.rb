@@ -159,8 +159,8 @@ class VB::PoolTest < TLDR
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
     @fake_state["workspaces"] = {}
-    name = pool.acquire
-    assert_equal "fast-gecko", name
+    result = pool.acquire
+    assert_equal "fast-gecko", result[:name]
   end
 
   def test_acquire_persists_workspace_to_state
@@ -348,9 +348,9 @@ class VB::PoolTest < TLDR
       process_factory: ->(*) { fake_process }
     )
 
-    returned_name = pool.acquire(send_cmd: "opencode")
+    result = pool.acquire(send_cmd: "opencode")
 
-    assert_equal "existing-ws", returned_name, "should reuse existing workspace"
+    assert_equal "existing-ws", result[:name], "should reuse existing workspace"
     assert reset_called, "should call reset_to_latest on reused workspace"
     refute add_called, "should NOT call add (no new workspace created)"
   end
@@ -388,9 +388,9 @@ class VB::PoolTest < TLDR
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
 
-    returned_name = pool.acquire(send_cmd: "opencode")
+    result = pool.acquire(send_cmd: "opencode")
 
-    assert_equal "fresh-ws", returned_name, "should create new workspace when existing is in-use"
+    assert_equal "fresh-ws", result[:name], "should create new workspace when existing is in-use"
     assert add_called, "should call add for new workspace"
   end
 
@@ -426,9 +426,9 @@ class VB::PoolTest < TLDR
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
 
-    returned_name = pool.acquire(send_cmd: "opencode")
+    result = pool.acquire(send_cmd: "opencode")
 
-    assert_equal "clean-ws", returned_name
+    assert_equal "clean-ws", result[:name]
     assert add_called
   end
 
@@ -471,8 +471,8 @@ class VB::PoolTest < TLDR
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
 
-    name = pool.acquire
-    assert_equal "second-name", name
+    result = pool.acquire
+    assert_equal "second-name", result[:name]
   end
 
   def test_acquire_copies_disk_image_to_workspace
@@ -606,6 +606,96 @@ class VB::PoolTest < TLDR
 
     pool.acquire
     assert_equal "cool-owl", add_args[:name]
+  end
+
+  def test_acquire_returns_hash_with_name_and_resumed_false_for_new_workspace
+    state = {}
+    fake_workspace = Object.new
+    def fake_workspace.add(name: nil)
+    end
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      names_class: Class.new { def self.generate = "new-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      deps_factory: ->(**) { fake_deps }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+    pool.define_singleton_method(:copy_repo_configs) { |dir| }
+
+    result = pool.acquire(send_cmd: "bash")
+    assert_equal "new-ws", result[:name]
+    assert_equal false, result[:resumed]
+  end
+
+  def test_acquire_returns_resumed_true_when_reusing
+    existing_dir = @repo_root
+    state = {"workspaces" => {
+      "old-ws" => {"workspace_dir" => existing_dir, "disk_image" => "/tmp/disk"}
+    }}
+    fake_workspace = Object.new
+    def fake_workspace.dirty? = false
+
+    def fake_workspace.reset_to_latest
+    end
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:)
+    end
+    fake_process = Object.new
+    def fake_process.alive?(pid:) = false
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process },
+      deps_factory: ->(**) { fake_deps }
+    )
+
+    result = pool.acquire(send_cmd: "bash")
+    assert_equal "old-ws", result[:name]
+    assert_equal true, result[:resumed]
+  end
+
+  def test_acquire_uses_resume_cmd_when_resuming
+    existing_dir = @repo_root
+    state = {"workspaces" => {
+      "old-ws" => {"workspace_dir" => existing_dir, "disk_image" => "/tmp/disk"}
+    }}
+    launched_cmd = nil
+    fake_workspace = Object.new
+    def fake_workspace.dirty? = false
+
+    def fake_workspace.reset_to_latest
+    end
+    fake_vm = Object.new
+    fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
+    fake_process = Object.new
+    def fake_process.alive?(pid:) = false
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process },
+      deps_factory: ->(**) { fake_deps }
+    )
+
+    pool.acquire(send_cmd: "bash", resume_cmd: "bash --login")
+    assert_equal "bash --login", launched_cmd
   end
 
   private

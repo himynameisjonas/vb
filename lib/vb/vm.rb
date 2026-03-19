@@ -26,7 +26,7 @@ module VB
         "--mount", "#{Dir.home}/.config/opencode:/root/.config/opencode",
         "--mount", "#{parent_dir}:#{parent_dir}",
         "--expect", "root@vibe",
-        "--send", "CI=1 exec bash -l",
+        "--send", "TERM=xterm-256color CI=1 exec bash -l",
         "--expect", "root@vibe",
         "--send", init_cmd
       ]
@@ -50,6 +50,7 @@ module VB
       parts << '{ command -v jj >/dev/null || { _jj_tmp=$(mktemp -d) && mise install-into jujutsu@latest "$_jj_tmp" && cp "$_jj_tmp/jj" /root/.local/bin/jj && rm -rf "$_jj_tmp"; }; }'
       parts << "{ command -v opencode >/dev/null || npm install -g opencode-ai 2>/dev/null; true; }"
       parts << "printf \"alias c='claude --dangerously-skip-permissions'\\nalias o='opencode'\\n\" > /root/.vb-aliases.sh && source /root/.vb-aliases.sh && { grep -qF '.vb-aliases.sh' /root/.bashrc || echo 'source /root/.vb-aliases.sh' >> /root/.bashrc; }"
+      parts << "unset CI"
       parts << send_cmd if send_cmd
       parts.join(" && ")
     end

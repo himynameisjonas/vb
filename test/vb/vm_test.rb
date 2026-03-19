@@ -95,6 +95,24 @@ class VB::VMTest < TLDR
     assert_equal "/repos/myrepo-swift-falcon", called_args[:chdir]
   end
 
+  def test_args_first_send_sets_term_256color
+    args = @vm.args_for(send_cmd: "my_cmd", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    first_send = args[send_indices.first + 1]
+    assert_includes first_send, "TERM=xterm-256color"
+  end
+
+  def test_init_cmd_unsets_ci_before_send_cmd
+    args = @vm.args_for(send_cmd: "claude", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+    parts = last_send.split(" && ")
+    unset_idx = parts.index("unset CI")
+    cmd_idx = parts.index("claude")
+    refute_nil unset_idx, "init cmd must unset CI"
+    assert unset_idx < cmd_idx, "unset CI must come before the send_cmd"
+  end
+
   def test_init_cmd_sources_aliases_in_current_session
     args = @vm.args_for(send_cmd: "bash", config_dir: "/tmp/cfg")
     send_indices = args.each_index.select { |i| args[i] == "--send" }

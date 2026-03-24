@@ -104,10 +104,12 @@ class VB::BootstrapTest < TLDR
 
   def test_run_deletes_image_on_vibe_failure
     File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/usr/bin/env bash\n")
-    File.write(File.join(@repo_root, ".vibe", "instance.raw"), "img")
 
     bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
-    bootstrap.define_singleton_method(:run_vibe) { |args, chdir: nil| false }
+    bootstrap.define_singleton_method(:run_vibe) do |args, chdir: nil|
+      File.write(File.join(@repo_root, ".vibe", "instance.raw"), "img")
+      false
+    end
 
     assert_raises(RuntimeError) { bootstrap.run }
     refute File.exist?(bootstrap.image_path)
@@ -121,5 +123,36 @@ class VB::BootstrapTest < TLDR
 
     err = assert_raises(RuntimeError) { bootstrap.run }
     assert(err.message.include?("Bootstrap failed") || err.message.include?("vibe"))
+  end
+
+  def test_run_creates_lock_file_during_execution
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    lock_existed_during_run = false
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    bootstrap.define_singleton_method(:run_vibe) do |args, chdir: nil|
+      lock_path = File.join(@repo_root, ".vibe", ".bootstrap.lock")
+      lock_existed_during_run = File.exist?(lock_path)
+      true
+    end
+
+    bootstrap.run
+    assert lock_existed_during_run, "lock file should exist during vibe execution"
+  end
+
+  def test_run_skips_vibe_if_image_exists_after_lock_acquired
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+    # Image already exists — simulates another process having bootstrapped
+    File.write(File.join(@repo_root, ".vibe", "instance.raw"), "img")
+
+    vibe_called = false
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    bootstrap.define_singleton_method(:run_vibe) { |args, chdir: nil|
+      vibe_called = true
+      true
+    }
+
+    bootstrap.run  # Should return early without calling vibe
+    refute vibe_called, "vibe should not be called if image already exists after lock acquired"
   end
 end

@@ -23,18 +23,25 @@ module VB
     def run
       raise "No bootstrap script at #{script_path}" unless script_exists?
 
-      parent_dir = File.dirname(@repo_root)
-      args = [
-        "--mount", "#{parent_dir}:#{parent_dir}",
-        "--expect", "root@vibe",
-        "--send", "TERM=xterm-256color exec bash -l",
-        "--expect", "root@vibe",
-        "--send", "cd #{@repo_root} && bash .vibe/bootstrap.sh"
-      ]
-      result = run_vibe(args, chdir: @repo_root)
-      unless result
-        FileUtils.rm_f(image_path)
-        raise "Bootstrap failed — vibe exited with error"
+      lock_path = File.join(@repo_root, ".vibe", ".bootstrap.lock")
+      FileUtils.mkdir_p(File.dirname(lock_path))
+      File.open(lock_path, File::RDWR | File::CREAT, 0o644) do |lock|
+        lock.flock(File::LOCK_EX)
+        next if image_exists?
+
+        parent_dir = File.dirname(@repo_root)
+        args = [
+          "--mount", "#{parent_dir}:#{parent_dir}",
+          "--expect", "root@vibe",
+          "--send", "TERM=xterm-256color exec bash -l",
+          "--expect", "root@vibe",
+          "--send", "cd #{@repo_root} && bash .vibe/bootstrap.sh"
+        ]
+        result = run_vibe(args, chdir: @repo_root)
+        unless result
+          FileUtils.rm_f(image_path)
+          raise "Bootstrap failed — vibe exited with error"
+        end
       end
     end
 

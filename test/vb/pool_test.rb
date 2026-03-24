@@ -849,6 +849,26 @@ class VB::PoolTest < TLDR
     refute bootstrap_run_called
   end
 
+  def test_acquire_still_works_with_default_bootstrap_factory
+    fake_workspace = Object.new
+    def fake_workspace.add(name: nil) = nil
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:) = nil
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: @fake_state_class,
+      names_class: Class.new { def self.generate = "default-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+    @fake_state["workspaces"] = {}
+
+    result = pool.acquire(send_cmd: "opencode")
+    assert_equal "default-ws", result[:name]
+  end
+
   private
 
   def build_fake_state_class(state)

@@ -11,7 +11,8 @@ module VB
       workspace_factory: ->(workspace_dir:, repo_root:) { Workspace.new(workspace_dir: workspace_dir, repo_root: repo_root) },
       vm_factory: ->(workspace_dir:, disk_image:) { VM.new(workspace_dir: workspace_dir, disk_image: disk_image) },
       deps_factory: ->(repo_root:, workspace_dir:) { Deps.new(repo_root: repo_root, workspace_dir: workspace_dir) },
-      process_factory: ->(*) { Process.new }
+      process_factory: ->(*) { Process.new },
+      bootstrap_factory: ->(repo_root:) { Bootstrap.new(repo_root: repo_root) }
     )
       @repo_root = repo_root
       @state_class = state_class
@@ -20,6 +21,7 @@ module VB
       @vm_factory = vm_factory
       @deps_factory = deps_factory
       @process_factory = process_factory
+      @bootstrap_factory = bootstrap_factory
     end
 
     def list
@@ -54,6 +56,7 @@ module VB
     end
 
     def acquire(send_cmd: "opencode", resume_cmd: nil)
+      ensure_source_image!
       vm = nil
       name = nil
       workspace_dir = nil
@@ -118,6 +121,18 @@ module VB
     end
 
     private
+
+    def ensure_source_image!
+      src = File.join(@repo_root, ".vibe", "instance.raw")
+      return if File.exist?(src)
+
+      bootstrap = @bootstrap_factory.call(repo_root: @repo_root)
+      if File.exist?(bootstrap.script_path)
+        bootstrap.run
+      else
+        raise "No disk image found at #{src}. Create a bootstrap script with `vb bootstrap edit` or add one manually."
+      end
+    end
 
     def copy_disk(src, dst)
       system("cp", "-c", src, dst)

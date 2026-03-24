@@ -6,6 +6,8 @@ require "fileutils"
 class VB::PoolTest < TLDR
   def setup
     @repo_root = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(@repo_root, ".vibe"))
+    File.write(File.join(@repo_root, ".vibe", "instance.raw"), "img")
     @fake_state = {}
     @fake_state_class = build_fake_state_class(@fake_state)
     @pool = VB::Pool.new(repo_root: @repo_root, state_class: @fake_state_class)
@@ -696,6 +698,155 @@ class VB::PoolTest < TLDR
 
     pool.acquire(send_cmd: "bash", resume_cmd: "bash --login")
     assert_equal "bash --login", launched_cmd
+  end
+
+  def test_acquire_runs_bootstrap_when_no_image_but_script_exists
+    FileUtils.rm_f(File.join(@repo_root, ".vibe", "instance.raw"))
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    bootstrap_run_called = false
+    repo_root = @repo_root
+    fake_bootstrap = Object.new
+    fake_bootstrap.define_singleton_method(:script_path) { File.join(repo_root, ".vibe", "bootstrap.sh") }
+    fake_bootstrap.define_singleton_method(:run) { bootstrap_run_called = true }
+
+    fake_workspace = Object.new
+    def fake_workspace.add(name: nil) = nil
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:) = nil
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: @fake_state_class,
+      names_class: Class.new { def self.generate = "boot-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      bootstrap_factory: ->(**) { fake_bootstrap }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+    @fake_state["workspaces"] = {}
+
+    pool.acquire(send_cmd: "opencode")
+    assert bootstrap_run_called, "bootstrap.run must be called when no image exists"
+  end
+
+  def test_acquire_skips_bootstrap_when_image_exists
+    bootstrap_run_called = false
+    fake_bootstrap = Object.new
+    fake_bootstrap.define_singleton_method(:run) { bootstrap_run_called = true }
+    fake_bootstrap.define_singleton_method(:script_path) { "/nonexistent/bootstrap.sh" }
+
+    fake_workspace = Object.new
+    def fake_workspace.add(name: nil) = nil
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:) = nil
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: @fake_state_class,
+      names_class: Class.new { def self.generate = "skip-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      bootstrap_factory: ->(**) { fake_bootstrap }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+    @fake_state["workspaces"] = {}
+
+    pool.acquire(send_cmd: "opencode")
+    refute bootstrap_run_called, "bootstrap.run must NOT be called when image already exists"
+  end
+
+  def test_acquire_raises_when_no_image_and_no_script
+    FileUtils.rm_f(File.join(@repo_root, ".vibe", "instance.raw"))
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: @fake_state_class
+    )
+    @fake_state["workspaces"] = {}
+
+    err = assert_raises(RuntimeError) { pool.acquire }
+    assert_includes err.message, "bootstrap"
+  end
+
+  def test_acquire_calls_bootstrap_before_state_lock
+    FileUtils.rm_f(File.join(@repo_root, ".vibe", "instance.raw"))
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    call_log = []
+    repo_root = @repo_root
+
+    fake_bootstrap = Object.new
+    fake_bootstrap.define_singleton_method(:script_path) { File.join(repo_root, ".vibe", "bootstrap.sh") }
+    fake_bootstrap.define_singleton_method(:run) do
+      call_log << :bootstrap
+      FileUtils.mkdir_p(File.join(repo_root, ".vibe"))
+      File.write(File.join(repo_root, ".vibe", "instance.raw"), "img")
+    end
+
+    fake_workspace = Object.new
+    def fake_workspace.add(name: nil) = nil
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:) = nil
+
+    locking_state_class = Class.new do
+      define_singleton_method(:with_lock) do |repo_root:, write: true, &block|
+        call_log << :state_lock
+        block.call({})
+      end
+    end
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: locking_state_class,
+      names_class: Class.new { def self.generate = "order-ws" },
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      bootstrap_factory: ->(**) { fake_bootstrap }
+    )
+    pool.define_singleton_method(:copy_disk) { |src, dst| }
+
+    pool.acquire(send_cmd: "opencode")
+
+    bootstrap_idx = call_log.index(:bootstrap)
+    first_lock_idx = call_log.index(:state_lock)
+    assert bootstrap_idx < first_lock_idx,
+      "bootstrap must run BEFORE state lock: call_log=#{call_log.inspect}"
+  end
+
+  def test_acquire_does_not_run_bootstrap_on_resume_path
+    bootstrap_run_called = false
+    fake_bootstrap = Object.new
+    fake_bootstrap.define_singleton_method(:run) { bootstrap_run_called = true }
+    fake_bootstrap.define_singleton_method(:script_path) { "/nonexistent/bootstrap.sh" }
+
+    existing_dir = @repo_root
+    state = {"workspaces" => {
+      "warm-ws" => {"workspace_dir" => existing_dir, "disk_image" => "/tmp/disk"}
+    }}
+    fake_workspace = Object.new
+    def fake_workspace.dirty? = false
+    def fake_workspace.reset_to_latest = nil
+    fake_vm = Object.new
+    def fake_vm.launch(send_cmd:) = nil
+    fake_process = Object.new
+    def fake_process.alive?(pid:) = false
+    fake_deps = Object.new
+    def fake_deps.install_commands = []
+
+    pool = VB::Pool.new(
+      repo_root: @repo_root,
+      state_class: build_fake_state_class(state),
+      workspace_factory: ->(**) { fake_workspace },
+      vm_factory: ->(**) { fake_vm },
+      process_factory: ->(*) { fake_process },
+      deps_factory: ->(**) { fake_deps },
+      bootstrap_factory: ->(**) { fake_bootstrap }
+    )
+
+    result = pool.acquire
+    assert_equal "warm-ws", result[:name]
+    refute bootstrap_run_called
   end
 
   private

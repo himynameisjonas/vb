@@ -1,16 +1,25 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "stringio"
+require "tmpdir"
 
 class VB::CLITest < TLDR
+  run_these_together!
+
   def setup
     @fake_pool = Object.new
-    @original_factory = VB::CLI.pool_factory
+    @original_pool_factory = VB::CLI.pool_factory
     VB::CLI.pool_factory = ->(**) { @fake_pool }
+
+    @fake_bootstrap = Object.new
+    @original_bootstrap_factory = VB::CLI.bootstrap_factory
+    VB::CLI.bootstrap_factory = ->(**) { @fake_bootstrap }
   end
 
   def teardown
-    VB::CLI.pool_factory = @original_factory
+    VB::CLI.pool_factory = @original_pool_factory
+    VB::CLI.bootstrap_factory = @original_bootstrap_factory
   end
 
   def test_status_prints_no_workspaces_when_empty
@@ -106,6 +115,166 @@ class VB::CLITest < TLDR
     }
     capture_output { VB::CLI.start(["claude"]) }
     assert_includes acquired_resume_cmd, "--continue"
+  end
+
+  def test_bootstrap_edit_creates_script_when_missing
+    dir = Dir.mktmpdir
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    old_editor = ENV["EDITOR"]
+    ENV["EDITOR"] = "/nonexistent-vb-test-editor"
+    begin
+      capture_output { VB::CLI.start(["bootstrap", "--edit"]) }
+    rescue Errno::ENOENT
+    ensure
+      ENV["EDITOR"] = old_editor
+    end
+
+    script = File.join(dir, ".vibe", "bootstrap.sh")
+    assert File.exist?(script), "bootstrap.sh should be created"
+    assert_includes File.read(script), "#!/bin/bash"
+    assert File.executable?(script), "bootstrap.sh should be executable"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_edit_does_not_recreate_existing_script
+    dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(dir, ".vibe"))
+    File.write(File.join(dir, ".vibe", "bootstrap.sh"), "#!/bin/bash\n# EXISTING\n")
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    old_editor = ENV["EDITOR"]
+    ENV["EDITOR"] = "/nonexistent-vb-test-editor"
+    begin
+      capture_output { VB::CLI.start(["bootstrap", "--edit"]) }
+    rescue Errno::ENOENT
+    ensure
+      ENV["EDITOR"] = old_editor
+    end
+
+    content = File.read(File.join(dir, ".vibe", "bootstrap.sh"))
+    assert_includes content, "# EXISTING", "should preserve existing script content"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_rebuild_errors_when_no_script
+    dir = Dir.mktmpdir
+    run_called = false
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    fake_bootstrap.define_singleton_method(:run) { run_called = true }
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    begin
+      capture_output { VB::CLI.start(["bootstrap"]) }
+    rescue SystemExit
+    end
+
+    refute run_called, "bootstrap.run must not be called when no script exists"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_rebuild_runs_bootstrap_when_no_image
+    dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(dir, ".vibe"))
+    File.write(File.join(dir, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    run_called = false
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    fake_bootstrap.define_singleton_method(:run) do
+      run_called = true
+      File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+    end
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    def @fake_pool.list = []
+
+    out = capture_output { VB::CLI.start(["bootstrap"]) }
+    assert run_called, "bootstrap.run should be called"
+    assert_includes out, "Bootstrapping"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_rebuild_warns_about_existing_workspaces
+    dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(dir, ".vibe"))
+    File.write(File.join(dir, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+    File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    fake_bootstrap.define_singleton_method(:run) do
+      File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+    end
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    @fake_pool.define_singleton_method(:list) { [{name: "ws1"}, {name: "ws2"}] }
+    @fake_pool.define_singleton_method(:destroy_all) {}
+
+    old_stdin = $stdin
+    $stdin = StringIO.new("n\n")
+    out = capture_output { VB::CLI.start(["bootstrap"]) }
+    $stdin = old_stdin
+
+    assert_includes out, "2 workspace"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_rebuild_destroys_workspaces_when_confirmed
+    dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(dir, ".vibe"))
+    File.write(File.join(dir, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+    File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    fake_bootstrap.define_singleton_method(:run) do
+      File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+    end
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    destroy_called = false
+    @fake_pool.define_singleton_method(:list) { [{name: "old-ws"}] }
+    @fake_pool.define_singleton_method(:destroy_all) { destroy_called = true }
+
+    old_stdin = $stdin
+    $stdin = StringIO.new("y\n")
+    capture_output { VB::CLI.start(["bootstrap"]) }
+    $stdin = old_stdin
+
+    assert destroy_called, "destroy_all should be called when user confirms"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_rebuild_skips_destroy_when_declined
+    dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(dir, ".vibe"))
+    File.write(File.join(dir, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+    File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+
+    fake_bootstrap = VB::Bootstrap.new(repo_root: dir)
+    fake_bootstrap.define_singleton_method(:run) do
+      File.write(File.join(dir, ".vibe", "instance.raw"), "img")
+    end
+    VB::CLI.bootstrap_factory = ->(**) { fake_bootstrap }
+
+    destroy_called = false
+    @fake_pool.define_singleton_method(:list) { [{name: "keep-ws"}] }
+    @fake_pool.define_singleton_method(:destroy_all) { destroy_called = true }
+
+    old_stdin = $stdin
+    $stdin = StringIO.new("n\n")
+    capture_output { VB::CLI.start(["bootstrap"]) }
+    $stdin = old_stdin
+
+    refute destroy_called, "destroy_all must NOT be called when user declines"
+  ensure
+    FileUtils.rm_rf(dir)
   end
 
   private

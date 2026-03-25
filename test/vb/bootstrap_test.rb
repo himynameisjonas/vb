@@ -175,7 +175,7 @@ class VB::BootstrapTest < TLDR
     bootstrap.run
 
     joined = captured_args.join(" ")
-    assert_includes joined, "/mnt/vb-global:ro"
+    assert_includes joined, "/mnt/vb-global:read-only"
     assert_includes joined, "bash /mnt/vb-global/bootstrap.sh && bash .vibe/bootstrap.sh"
   end
 

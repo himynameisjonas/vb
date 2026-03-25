@@ -43,7 +43,7 @@ module VB
         send_parts = ["cd #{@repo_root}"]
 
         if global_script_exists?
-          args += ["--mount", "#{global_dir}:/mnt/vb-global:ro"]
+          args += ["--mount", "#{global_dir}:/mnt/vb-global:read-only"]
           send_parts << "bash /mnt/vb-global/bootstrap.sh"
         end
 

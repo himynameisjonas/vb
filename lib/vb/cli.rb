@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "shellwords"
 require "thor"
 
 module VB
@@ -104,7 +105,7 @@ module VB
             File.chmod(0o755, script)
             puts "Created #{script}"
           end
-          exec(ENV.fetch("EDITOR", "vi"), script)
+          exec(*Shellwords.split(ENV.fetch("EDITOR", "vi")), script)
         else
           b = self.class.bootstrap_factory.call(repo_root: Dir.pwd)
           unless File.exist?(b.script_path)
@@ -121,7 +122,7 @@ module VB
             File.chmod(0o755, b.script_path)
             puts "Created #{b.script_path}"
           end
-          exec(ENV.fetch("EDITOR", "vi"), b.script_path)
+          exec(*Shellwords.split(ENV.fetch("EDITOR", "vi")), b.script_path)
         end
       end
 

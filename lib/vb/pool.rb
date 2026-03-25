@@ -109,7 +109,7 @@ module VB
       deps = @deps_factory.call(repo_root: @repo_root, workspace_dir: workspace_dir)
       cmds = deps.install_commands
       effective_cmd = (resumed && resume_cmd) ? resume_cmd : send_cmd
-      effective_cmd = "#{cmds.join(" && ")} && #{effective_cmd}" unless cmds.empty?
+      effective_cmd = [*cmds, effective_cmd].compact.join(" && ")
 
       vm.launch(send_cmd: effective_cmd)
 

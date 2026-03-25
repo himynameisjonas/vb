@@ -47,9 +47,6 @@ module VB
       parts << "cp /mnt/claude-config/.claude.json /root/.claude.json 2>/dev/null; true"
       parts << "{ mkdir -p /root/.local/share/opencode && cp /mnt/claude-config/opencode-auth.json /root/.local/share/opencode/auth.json 2>/dev/null; true; }"
       parts << "cd #{@workspace_dir}"
-      parts << '{ command -v jj >/dev/null || { _jj_tmp=$(mktemp -d) && mise install-into jujutsu@latest "$_jj_tmp" && cp "$_jj_tmp/jj" /root/.local/bin/jj && rm -rf "$_jj_tmp"; }; }'
-      parts << "{ command -v opencode >/dev/null || npm install -g opencode-ai 2>/dev/null; true; }"
-      parts << "printf \"alias c='claude --dangerously-skip-permissions'\\nalias o='opencode'\\n\" > /root/.vb-aliases.sh && source /root/.vb-aliases.sh && { grep -qF '.vb-aliases.sh' /root/.bashrc || echo 'source /root/.vb-aliases.sh' >> /root/.bashrc; }"
       parts << "unset CI"
       parts << send_cmd if send_cmd
       parts.join(" && ")

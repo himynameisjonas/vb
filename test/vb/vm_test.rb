@@ -66,13 +66,6 @@ class VB::VMTest < TLDR
     assert_includes last_send, "cd /repos/myrepo-swift-falcon"
   end
 
-  def test_args_includes_jj_install_check
-    args = @vm.args_for(send_cmd: "opencode", config_dir: "/tmp/cfg")
-    send_indices = args.each_index.select { |i| args[i] == "--send" }
-    last_send = args[send_indices.last + 1]
-    assert_includes last_send, "command -v jj"
-  end
-
   def test_args_init_cmd_ends_with_send_cmd
     args = @vm.args_for(send_cmd: "myeditor", config_dir: "/tmp/cfg")
     send_indices = args.each_index.select { |i| args[i] == "--send" }
@@ -111,16 +104,5 @@ class VB::VMTest < TLDR
     cmd_idx = parts.index("claude")
     refute_nil unset_idx, "init cmd must unset CI"
     assert unset_idx < cmd_idx, "unset CI must come before the send_cmd"
-  end
-
-  def test_init_cmd_sources_aliases_in_current_session
-    args = @vm.args_for(send_cmd: "bash", config_dir: "/tmp/cfg")
-    send_indices = args.each_index.select { |i| args[i] == "--send" }
-    last_send = args[send_indices.last + 1]
-    assert_includes last_send, "alias c="
-    assert_includes last_send, "alias o="
-    parts = last_send.split(" && ")
-    aliases_part = parts.find { |p| p.include?(".vb-aliases.sh") && p.include?("source") && !p.include?("echo") }
-    refute_nil aliases_part, "init cmd must directly source .vb-aliases.sh (not just echo it to .bashrc)"
   end
 end

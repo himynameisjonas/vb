@@ -70,9 +70,10 @@ module VB
 
     desc "bootstrap", "Rebuild the vibe template image from .vibe/bootstrap.sh (--edit to open script)"
     option :edit, type: :boolean, default: false
+    option :global, type: :boolean, default: false
     def bootstrap
       if options[:edit]
-        run_bootstrap_edit
+        run_bootstrap_edit(global: options[:global])
       else
         run_bootstrap_rebuild
       end
@@ -86,23 +87,42 @@ module VB
         puts "#{action} workspace: #{result[:name]}"
       end
 
-      def run_bootstrap_edit
-        b = self.class.bootstrap_factory.call(repo_root: Dir.pwd)
-        unless File.exist?(b.script_path)
-          FileUtils.mkdir_p(File.dirname(b.script_path))
-          content = <<~BASH
-            #!/bin/bash
+      def run_bootstrap_edit(global: false)
+        if global
+          script = File.join(Dir.home, ".vb", "bootstrap.sh")
+          unless File.exist?(script)
+            FileUtils.mkdir_p(File.dirname(script))
+            content = <<~BASH
+              #!/bin/bash
 
-            # Install tools and configure the vibe VM template.
-            # This script runs once to create the base disk image.
-            # All workspaces will inherit from this image.
+              # Shared bootstrap script for all vb repos.
+              # Runs before each repo's .vibe/bootstrap.sh during image creation.
+              # Install tools common to all your projects here.
 
-          BASH
-          File.write(b.script_path, content)
-          File.chmod(0o755, b.script_path)
-          puts "Created #{b.script_path}"
+            BASH
+            File.write(script, content)
+            File.chmod(0o755, script)
+            puts "Created #{script}"
+          end
+          exec(ENV.fetch("EDITOR", "vi"), script)
+        else
+          b = self.class.bootstrap_factory.call(repo_root: Dir.pwd)
+          unless File.exist?(b.script_path)
+            FileUtils.mkdir_p(File.dirname(b.script_path))
+            content = <<~BASH
+              #!/bin/bash
+
+              # Install tools and configure the vibe VM template.
+              # This script runs once to create the base disk image.
+              # All workspaces will inherit from this image.
+
+            BASH
+            File.write(b.script_path, content)
+            File.chmod(0o755, b.script_path)
+            puts "Created #{b.script_path}"
+          end
+          exec(ENV.fetch("EDITOR", "vi"), b.script_path)
         end
-        exec(ENV.fetch("EDITOR", "vi"), b.script_path)
       end
 
       def run_bootstrap_rebuild

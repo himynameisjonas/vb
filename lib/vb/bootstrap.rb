@@ -20,6 +20,10 @@ module VB
       File.join(@repo_root, ".vibe", "instance.raw")
     end
 
+    def global_script_path
+      File.join(Dir.home, ".vb", "bootstrap.sh")
+    end
+
     def run
       raise "No bootstrap script at #{script_path}" unless script_exists?
 
@@ -30,12 +34,26 @@ module VB
         next if image_exists?
 
         parent_dir = File.dirname(@repo_root)
+        global_dir = File.join(Dir.home, ".vb")
+
         args = [
-          "--mount", "#{parent_dir}:#{parent_dir}",
+          "--mount", "#{parent_dir}:#{parent_dir}"
+        ]
+
+        send_parts = ["cd #{@repo_root}"]
+
+        if global_script_exists?
+          args += ["--mount", "#{global_dir}:/mnt/vb-global:ro"]
+          send_parts << "bash /mnt/vb-global/bootstrap.sh"
+        end
+
+        send_parts << "bash .vibe/bootstrap.sh"
+
+        args += [
           "--expect", "root@vibe",
           "--send", "TERM=xterm-256color exec bash -l",
           "--expect", "root@vibe",
-          "--send", "cd #{@repo_root} && bash .vibe/bootstrap.sh"
+          "--send", send_parts.join(" && ")
         ]
         result = run_vibe(args, chdir: @repo_root)
         unless result
@@ -53,6 +71,10 @@ module VB
 
     def script_exists?
       File.exist?(script_path)
+    end
+
+    def global_script_exists?
+      File.exist?(global_script_path)
     end
 
     def run_vibe(args, chdir: nil)

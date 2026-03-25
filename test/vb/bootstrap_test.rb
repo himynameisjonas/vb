@@ -51,6 +51,11 @@ class VB::BootstrapTest < TLDR
     assert_equal File.join(@repo_root, ".vibe", "instance.raw"), bootstrap.image_path
   end
 
+  def test_global_script_path_returns_home_vb_bootstrap
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    assert_equal File.join(Dir.home, ".vb", "bootstrap.sh"), bootstrap.global_script_path
+  end
+
   def test_run_builds_minimal_vibe_args
     File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/usr/bin/env bash\n")
 
@@ -154,5 +159,67 @@ class VB::BootstrapTest < TLDR
 
     bootstrap.run  # Should return early without calling vibe
     refute vibe_called, "vibe should not be called if image already exists after lock acquired"
+  end
+
+  def test_run_includes_global_mount_when_global_script_exists
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    captured_args = nil
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    bootstrap.define_singleton_method(:global_script_exists?) { true }
+    bootstrap.define_singleton_method(:run_vibe) { |args, chdir: nil|
+      captured_args = args
+      true
+    }
+
+    bootstrap.run
+
+    joined = captured_args.join(" ")
+    assert_includes joined, "/mnt/vb-global:ro"
+    assert_includes joined, "bash /mnt/vb-global/bootstrap.sh && bash .vibe/bootstrap.sh"
+  end
+
+  def test_run_skips_global_mount_when_no_global_script
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    captured_args = nil
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    bootstrap.define_singleton_method(:global_script_exists?) { false }
+    bootstrap.define_singleton_method(:run_vibe) { |args, chdir: nil|
+      captured_args = args
+      true
+    }
+
+    bootstrap.run
+
+    joined = captured_args.join(" ")
+    refute_includes joined, "vb-global"
+    refute_includes joined, "/mnt/vb-global"
+    send_indices = captured_args.each_index.select { |i| captured_args[i] == "--send" }
+    last_send = captured_args[send_indices.last + 1]
+    assert last_send.end_with?("bash .vibe/bootstrap.sh")
+    refute_includes last_send, "bash /mnt/vb-global/bootstrap.sh"
+  end
+
+  def test_run_global_script_runs_before_repo_script
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    captured_args = nil
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    bootstrap.define_singleton_method(:global_script_exists?) { true }
+    bootstrap.define_singleton_method(:run_vibe) { |args, chdir: nil|
+      captured_args = args
+      true
+    }
+
+    bootstrap.run
+
+    send_indices = captured_args.each_index.select { |i| captured_args[i] == "--send" }
+    last_send = captured_args[send_indices.last + 1]
+    global_pos = last_send.index("bash /mnt/vb-global/bootstrap.sh")
+    repo_pos = last_send.index("bash .vibe/bootstrap.sh")
+    refute_nil global_pos
+    refute_nil repo_pos
+    assert global_pos < repo_pos, "global script must run before repo script"
   end
 end

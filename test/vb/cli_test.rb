@@ -277,6 +277,52 @@ class VB::CLITest < TLDR
     FileUtils.rm_rf(dir)
   end
 
+  def test_bootstrap_edit_global_creates_global_script
+    dir = Dir.mktmpdir
+    old_home = ENV["HOME"]
+    ENV["HOME"] = dir
+    old_editor = ENV["EDITOR"]
+    ENV["EDITOR"] = "/nonexistent-vb-test-editor"
+    begin
+      capture_output { VB::CLI.start(["bootstrap", "--edit", "--global"]) }
+    rescue Errno::ENOENT
+    ensure
+      ENV["EDITOR"] = old_editor
+      ENV["HOME"] = old_home
+    end
+
+    script = File.join(dir, ".vb", "bootstrap.sh")
+    assert File.exist?(script), "global bootstrap.sh should be created"
+    assert_includes File.read(script), "#!/bin/bash"
+    assert_includes File.read(script), "Shared bootstrap"
+    assert File.executable?(script), "global bootstrap.sh should be executable"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_bootstrap_edit_global_preserves_existing_global_script
+    dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(dir, ".vb"))
+    File.write(File.join(dir, ".vb", "bootstrap.sh"), "#!/bin/bash\n# MY GLOBAL\n")
+
+    old_home = ENV["HOME"]
+    ENV["HOME"] = dir
+    old_editor = ENV["EDITOR"]
+    ENV["EDITOR"] = "/nonexistent-vb-test-editor"
+    begin
+      capture_output { VB::CLI.start(["bootstrap", "--edit", "--global"]) }
+    rescue Errno::ENOENT
+    ensure
+      ENV["EDITOR"] = old_editor
+      ENV["HOME"] = old_home
+    end
+
+    content = File.read(File.join(dir, ".vb", "bootstrap.sh"))
+    assert_includes content, "# MY GLOBAL", "should preserve existing global script"
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
   private
 
   def capture_output(&block)

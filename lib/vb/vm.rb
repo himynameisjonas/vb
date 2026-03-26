@@ -5,9 +5,10 @@ require "tmpdir"
 
 module VB
   class VM
-    def initialize(workspace_dir:, disk_image:)
+    def initialize(workspace_dir:, disk_image:, vcs_mounts: [])
       @workspace_dir = workspace_dir
       @disk_image = disk_image
+      @vcs_mounts = vcs_mounts
     end
 
     def launch(send_cmd:)
@@ -20,16 +21,19 @@ module VB
     def args_for(send_cmd:, config_dir:)
       parent_dir = File.dirname(@workspace_dir)
       init_cmd = build_init_cmd(send_cmd)
-      [
-        "--mount", "#{config_dir}:/mnt/claude-config:read-only",
-        "--mount", "#{Dir.home}/.config/jj:/root/.config/jj",
+      args = [
+        "--mount", "#{config_dir}:/mnt/claude-config:read-only"
+      ]
+      @vcs_mounts.each { |m| args.push("--mount", m) }
+      args.push(
         "--mount", "#{Dir.home}/.config/opencode:/root/.config/opencode",
         "--mount", "#{parent_dir}:#{parent_dir}",
         "--expect", "root@vibe",
         "--send", "TERM=xterm-256color CI=1 exec bash -l",
         "--expect", "root@vibe",
         "--send", init_cmd
-      ]
+      )
+      args
     end
 
     private

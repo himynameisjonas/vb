@@ -105,4 +105,22 @@ class VB::VMTest < TLDR
     refute_nil unset_idx, "init cmd must unset CI"
     assert unset_idx < cmd_idx, "unset CI must come before the send_cmd"
   end
+
+  def test_init_cmd_sources_vibe_env_after_cd_before_unset_ci
+    args = @vm.args_for(send_cmd: "opencode", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+
+    # Find indices by searching in the full command string
+    cd_idx = last_send.index("cd /repos/myrepo-swift-falcon")
+    source_idx = last_send.index("{ set -a; [ -f .vibe/.env ] && source .vibe/.env; set +a; }")
+    unset_idx = last_send.index("unset CI")
+
+    refute_nil cd_idx, "init cmd must cd to workspace"
+    refute_nil source_idx, "init cmd must source .vibe/.env"
+    refute_nil unset_idx, "init cmd must unset CI"
+
+    assert cd_idx < source_idx, "cd must come before sourcing .vibe/.env"
+    assert source_idx < unset_idx, "sourcing .vibe/.env must come before unset CI"
+  end
 end

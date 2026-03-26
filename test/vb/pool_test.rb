@@ -869,6 +869,35 @@ class VB::PoolTest < TLDR
     assert_equal "default-ws", result[:name]
   end
 
+  def test_copy_repo_configs_copies_vibe_env_when_present
+    workspace_dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(workspace_dir, ".vibe"))
+
+    src_env = File.join(@repo_root, ".vibe", ".env")
+    FileUtils.mkdir_p(File.join(@repo_root, ".vibe"))
+    File.write(src_env, "TEST_VAR=value")
+
+    @pool.send(:copy_repo_configs, workspace_dir)
+
+    dst_env = File.join(workspace_dir, ".vibe", ".env")
+    assert File.exist?(dst_env)
+    assert_equal "TEST_VAR=value", File.read(dst_env)
+
+    FileUtils.rm_rf(workspace_dir)
+  end
+
+  def test_copy_repo_configs_skips_vibe_env_when_absent
+    workspace_dir = Dir.mktmpdir
+    FileUtils.mkdir_p(File.join(workspace_dir, ".vibe"))
+
+    @pool.send(:copy_repo_configs, workspace_dir)
+
+    dst_env = File.join(workspace_dir, ".vibe", ".env")
+    refute File.exist?(dst_env)
+
+    FileUtils.rm_rf(workspace_dir)
+  end
+
   private
 
   def build_fake_state_class(state)

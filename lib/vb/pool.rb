@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "time"
 
 module VB
   class Pool
@@ -148,6 +149,9 @@ module VB
 
       src = File.join(@repo_root, ".env.development")
       FileUtils.cp(src, File.join(workspace_dir, ".env.development")) if File.exist?(src)
+
+      src = File.join(@repo_root, ".vibe", ".env")
+      FileUtils.cp(src, File.join(workspace_dir, ".vibe", ".env")) if File.exist?(src)
     end
 
     def _destroy(name:, state:)

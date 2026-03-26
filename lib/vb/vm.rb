@@ -47,6 +47,7 @@ module VB
       parts << "cp /mnt/claude-config/.claude.json /root/.claude.json 2>/dev/null; true"
       parts << "{ mkdir -p /root/.local/share/opencode && cp /mnt/claude-config/opencode-auth.json /root/.local/share/opencode/auth.json 2>/dev/null; true; }"
       parts << "cd #{@workspace_dir}"
+      parts << "{ set -a; [ -f .vibe/.env ] && source .vibe/.env; set +a; }"
       parts << "unset CI"
       parts << send_cmd if send_cmd
       parts.join(" && ")

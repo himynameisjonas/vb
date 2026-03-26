@@ -176,7 +176,8 @@ class VB::BootstrapTest < TLDR
 
     joined = captured_args.join(" ")
     assert_includes joined, "/mnt/vb-global:read-only"
-    assert_includes joined, "bash /mnt/vb-global/bootstrap.sh && bash .vibe/bootstrap.sh"
+    assert_includes joined, "bash /mnt/vb-global/bootstrap.sh"
+    assert_includes joined, "bash .vibe/bootstrap.sh"
   end
 
   def test_run_skips_global_mount_when_no_global_script
@@ -221,5 +222,29 @@ class VB::BootstrapTest < TLDR
     refute_nil global_pos
     refute_nil repo_pos
     assert global_pos < repo_pos, "global script must run before repo script"
+  end
+
+  def test_run_sources_vibe_env_before_repo_bootstrap_script
+    File.write(File.join(@repo_root, ".vibe", "bootstrap.sh"), "#!/bin/bash\n")
+
+    captured_args = nil
+    bootstrap = VB::Bootstrap.new(repo_root: @repo_root)
+    bootstrap.define_singleton_method(:run_vibe) { |args, chdir: nil|
+      captured_args = args
+      true
+    }
+
+    bootstrap.run
+
+    send_indices = captured_args.each_index.select { |i| captured_args[i] == "--send" }
+    last_send = captured_args[send_indices.last + 1]
+
+    source_snippet = "{ set -a; [ -f .vibe/.env ] && source .vibe/.env; set +a; }"
+    source_pos = last_send.index(source_snippet)
+    repo_bootstrap_pos = last_send.index("bash .vibe/bootstrap.sh")
+
+    refute_nil source_pos, "source snippet should be present in send string"
+    refute_nil repo_bootstrap_pos, "repo bootstrap script should be present"
+    assert source_pos < repo_bootstrap_pos, "source must run before repo bootstrap script"
   end
 end

@@ -47,6 +47,7 @@ module VB
           send_parts << "bash /mnt/vb-global/bootstrap.sh"
         end
 
+        send_parts << "{ set -a; [ -f .vibe/.env ] && source .vibe/.env; set +a; }"
         send_parts << "bash .vibe/bootstrap.sh"
 
         args += [

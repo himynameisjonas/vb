@@ -10,8 +10,7 @@ module VB
       state_class: State,
       names_class: Names,
       workspace_factory: ->(workspace_dir:, repo_root:) { Workspace.new(workspace_dir: workspace_dir, repo_root: repo_root) },
-      vm_factory: ->(workspace_dir:, disk_image:) { VM.new(workspace_dir: workspace_dir, disk_image: disk_image) },
-      deps_factory: ->(repo_root:, workspace_dir:) { Deps.new(repo_root: repo_root, workspace_dir: workspace_dir) },
+      vm_factory: ->(repo_root:, workspace_dir:, disk_image:) { VM.new(repo_root: repo_root, workspace_dir: workspace_dir, disk_image: disk_image) },
       process_factory: ->(*) { Process.new },
       bootstrap_factory: ->(repo_root:) { Bootstrap.new(repo_root: repo_root) }
     )
@@ -20,7 +19,6 @@ module VB
       @names_class = names_class
       @workspace_factory = workspace_factory
       @vm_factory = vm_factory
-      @deps_factory = deps_factory
       @process_factory = process_factory
       @bootstrap_factory = bootstrap_factory
     end
@@ -80,7 +78,7 @@ module VB
           ws = @workspace_factory.call(workspace_dir: workspace_dir, repo_root: @repo_root)
           ws.reset_to_latest
           info["pid"] = ::Process.pid
-          vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: info["disk_image"])
+          vm = @vm_factory.call(repo_root: @repo_root, workspace_dir: workspace_dir, disk_image: info["disk_image"])
           resumed = true
         else
           name = @names_class.generate
@@ -103,14 +101,11 @@ module VB
             "created_at" => Time.now.iso8601,
             "pid" => ::Process.pid
           }
-          vm = @vm_factory.call(workspace_dir: workspace_dir, disk_image: dst_disk)
+          vm = @vm_factory.call(repo_root: @repo_root, workspace_dir: workspace_dir, disk_image: dst_disk)
         end
       end
 
-      deps = @deps_factory.call(repo_root: @repo_root, workspace_dir: workspace_dir)
-      cmds = deps.install_commands
       effective_cmd = (resumed && resume_cmd) ? resume_cmd : send_cmd
-      effective_cmd = [*cmds, effective_cmd].compact.join(" && ")
 
       vm.launch(send_cmd: effective_cmd)
 

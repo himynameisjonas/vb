@@ -5,7 +5,8 @@ require "tmpdir"
 
 module VB
   class VM
-    def initialize(workspace_dir:, disk_image:)
+    def initialize(repo_root:, workspace_dir:, disk_image:)
+      @repo_root = repo_root
       @workspace_dir = workspace_dir
       @disk_image = disk_image
     end
@@ -47,9 +48,10 @@ module VB
       parts << "cp /mnt/claude-config/.claude.json /root/.claude.json 2>/dev/null; true"
       parts << "{ mkdir -p /root/.local/share/opencode && cp /mnt/claude-config/opencode-auth.json /root/.local/share/opencode/auth.json 2>/dev/null; true; }"
       parts << "cd #{@workspace_dir}"
+      parts << "grep -qF '#{@repo_root}/.vibe/.env' ~/.bashrc 2>/dev/null || echo '{ set -a; [ -f #{@repo_root}/.vibe/.env ] && source #{@repo_root}/.vibe/.env; set +a; }' >> ~/.bashrc"
       parts << "{ set -a; [ -f .vibe/.env ] && source .vibe/.env; set +a; }"
       parts << "unset CI"
-      parts << send_cmd if send_cmd
+      parts << send_cmd if send_cmd && !send_cmd.empty?
       parts.join(" && ")
     end
 

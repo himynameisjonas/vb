@@ -3,6 +3,7 @@
 class VB::VMTest < TLDR
   def setup
     @vm = VB::VM.new(
+      repo_root: "/repos/myrepo",
       workspace_dir: "/repos/myrepo-swift-falcon",
       disk_image: "/repos/myrepo/.vibe/instance.raw"
     )
@@ -21,7 +22,7 @@ class VB::VMTest < TLDR
 
   def test_args_includes_parent_dir_mount
     args = @vm.args_for(send_cmd: "echo hi", config_dir: "/tmp/cfg")
-    assert args.any? { |a| a.include?("/repos:/repos") }
+    assert args.any? { |a| a == "/repos:/repos" }
   end
 
   def test_args_includes_expect_and_send_pairs
@@ -122,5 +123,21 @@ class VB::VMTest < TLDR
 
     assert cd_idx < source_idx, "cd must come before sourcing .vibe/.env"
     assert source_idx < unset_idx, "sourcing .vibe/.env must come before unset CI"
+  end
+
+  def test_init_cmd_persists_vibe_env_in_bashrc
+    args = @vm.args_for(send_cmd: "opencode", config_dir: "/tmp/cfg")
+    send_indices = args.each_index.select { |i| args[i] == "--send" }
+    last_send = args[send_indices.last + 1]
+
+    assert_includes last_send, "grep -qF '/repos/myrepo/.vibe/.env' ~/.bashrc"
+    assert_includes last_send, "source /repos/myrepo/.vibe/.env"
+
+    parts = last_send.split(" && ")
+    bashrc_part_idx = parts.index { |p| p.include?(">> ~/.bashrc") }
+    source_part_idx = parts.index { |p| p.start_with?("{ set -a;") }
+    refute_nil bashrc_part_idx, "must have bashrc write part"
+    refute_nil source_part_idx, "must have inline source part"
+    assert bashrc_part_idx < source_part_idx, "bashrc write must come before inline sourcing"
   end
 end

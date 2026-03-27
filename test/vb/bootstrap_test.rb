@@ -71,6 +71,7 @@ class VB::BootstrapTest < TLDR
     parent_dir = File.dirname(@repo_root)
     assert_includes captured_args, "--mount"
     assert captured_args.any? { |a| a == "#{parent_dir}:#{parent_dir}" }
+    refute captured_args.any? { |a| a == "#{@repo_root}:#{@repo_root}" }
     expect_indices = captured_args.each_index.select { |i| captured_args[i] == "--expect" }
     send_indices = captured_args.each_index.select { |i| captured_args[i] == "--send" }
     assert_equal 2, expect_indices.length

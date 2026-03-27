@@ -2,80 +2,70 @@
 
 class VB::WorkspaceTest < TLDR
   def setup
+    @vcs_calls = []
+    @fake_vcs = Object.new
+    calls = @vcs_calls
+    @fake_vcs.define_singleton_method(:add_workspace) do |dir, name: nil|
+      calls << {method: :add_workspace, dir: dir, name: name}
+    end
+    @fake_vcs.define_singleton_method(:forget_workspace) do |dir|
+      calls << {method: :forget_workspace, dir: dir}
+    end
+    @fake_vcs.define_singleton_method(:dirty?) do |dir|
+      calls << {method: :dirty?, dir: dir}
+      false
+    end
+    @fake_vcs.define_singleton_method(:reset_to_latest) do |dir|
+      calls << {method: :reset_to_latest, dir: dir}
+    end
+
     @workspace = VB::Workspace.new(
       workspace_dir: "/tmp/myrepo-swift-falcon",
-      repo_root: "/tmp/myrepo"
+      repo_root: "/tmp/myrepo",
+      vcs: @fake_vcs
     )
-    @jj_calls = []
-    @workspace.define_singleton_method(:run_jj) do |args, chdir: nil|
-      @jj_calls << {args: args, chdir: chdir}
-      true
-    end
-    @workspace.instance_variable_set(:@jj_calls, @jj_calls)
   end
 
-  def test_add_calls_jj_workspace_add
+  def test_add_delegates_to_vcs
     @workspace.add
-    assert_equal 1, @jj_calls.length
-    assert_includes @jj_calls[0][:args], "workspace"
-    assert_includes @jj_calls[0][:args], "add"
-    assert_includes @jj_calls[0][:args], "/tmp/myrepo-swift-falcon"
+    assert_equal 1, @vcs_calls.length
+    assert_equal :add_workspace, @vcs_calls[0][:method]
+    assert_equal "/tmp/myrepo-swift-falcon", @vcs_calls[0][:dir]
   end
 
-  def test_forget_calls_jj_workspace_forget
-    @workspace.forget
-    assert_equal 1, @jj_calls.length
-    assert_includes @jj_calls[0][:args], "workspace"
-    assert_includes @jj_calls[0][:args], "forget"
-    assert_includes @jj_calls[0][:args], "swift-falcon"
-  end
-
-  def test_forget_runs_from_repo_root_not_workspace_dir
-    @workspace.forget
-    assert_equal "/tmp/myrepo", @jj_calls[0][:chdir],
-      "forget must run from repo_root so jj can find the workspace; running from workspace_dir causes 'No such workspace' warning"
-  end
-
-  def test_dirty_returns_true_when_changes_present
-    fake_ok = Object.new
-    def fake_ok.success? = true
-    @workspace.define_singleton_method(:run_jj_capture) do |args, chdir: nil|
-      ["Working copy changes:\nM foo.rb\n", fake_ok]
-    end
-    assert @workspace.dirty?
-  end
-
-  def test_dirty_returns_false_when_no_changes
-    fake_ok = Object.new
-    def fake_ok.success? = true
-    @workspace.define_singleton_method(:run_jj_capture) do |args, chdir: nil|
-      ["The working copy has no changes.\n", fake_ok]
-    end
-    refute @workspace.dirty?
-  end
-
-  def test_dirty_returns_true_when_jj_exits_nonzero
-    fake_status = Object.new
-    def fake_status.success? = false
-    @workspace.define_singleton_method(:run_jj_capture) { |args, chdir: nil| ["Error: no repo", fake_status] }
-    assert @workspace.dirty?
-  end
-
-  def test_reset_to_latest_calls_jj_new_trunk_revset
-    @workspace.reset_to_latest
-    assert_equal 1, @jj_calls.length
-    assert_includes @jj_calls[0][:args], "new"
-    assert_includes @jj_calls[0][:args], "trunk()"
-  end
-
-  def test_add_passes_name_flag_when_provided
+  def test_add_passes_name_to_vcs
     @workspace.add(name: "swift-falcon")
-    assert_includes @jj_calls[0][:args], "--name"
-    assert_includes @jj_calls[0][:args], "swift-falcon"
+    assert_equal "swift-falcon", @vcs_calls[0][:name]
   end
 
-  def test_add_omits_name_flag_when_nil
+  def test_add_passes_nil_name_when_not_provided
     @workspace.add
-    refute @jj_calls[0][:args].include?("--name")
+    assert_nil @vcs_calls[0][:name]
+  end
+
+  def test_forget_delegates_to_vcs
+    @workspace.forget
+    assert_equal 1, @vcs_calls.length
+    assert_equal :forget_workspace, @vcs_calls[0][:method]
+    assert_equal "/tmp/myrepo-swift-falcon", @vcs_calls[0][:dir]
+  end
+
+  def test_dirty_delegates_to_vcs
+    @workspace.dirty?
+    assert_equal 1, @vcs_calls.length
+    assert_equal :dirty?, @vcs_calls[0][:method]
+    assert_equal "/tmp/myrepo-swift-falcon", @vcs_calls[0][:dir]
+  end
+
+  def test_dirty_returns_vcs_result
+    @fake_vcs.define_singleton_method(:dirty?) { |_dir| true }
+    assert @workspace.dirty?
+  end
+
+  def test_reset_to_latest_delegates_to_vcs
+    @workspace.reset_to_latest
+    assert_equal 1, @vcs_calls.length
+    assert_equal :reset_to_latest, @vcs_calls[0][:method]
+    assert_equal "/tmp/myrepo-swift-falcon", @vcs_calls[0][:dir]
   end
 end

@@ -4,24 +4,48 @@ class VB::VMTest < TLDR
   def setup
     @vm = VB::VM.new(
       workspace_dir: "/repos/myrepo-swift-falcon",
-      disk_image: "/repos/myrepo/.vibe/instance.raw"
+      disk_image: "/repos/myrepo/.vibe/instance.raw",
+      vcs_mounts: ["#{Dir.home}/.config/jj:/root/.config/jj"]
     )
   end
 
   def test_args_includes_config_mount
     args = @vm.args_for(send_cmd: "echo hi", config_dir: "/tmp/cfg")
     assert_includes args, "--mount"
-    assert args.any? { |a| a.include?("/tmp/cfg") && a.include?(":/mnt/claude-config:read-only") }
+    assert(args.any? { |a| a.include?("/tmp/cfg") && a.include?(":/mnt/claude-config:read-only") })
   end
 
-  def test_args_includes_jj_config_mount
+  def test_args_includes_vcs_config_mount
     args = @vm.args_for(send_cmd: "echo hi", config_dir: "/tmp/cfg")
-    assert args.any? { |a| a.include?(".config/jj") }
+    assert(args.any? { |a| a.include?(".config/jj") })
+  end
+
+  def test_args_includes_multiple_vcs_mounts
+    vm = VB::VM.new(
+      workspace_dir: "/repos/myrepo-swift-falcon",
+      disk_image: "/repos/myrepo/.vibe/instance.raw",
+      vcs_mounts: [
+        "#{Dir.home}/.gitconfig:/root/.gitconfig",
+        "#{Dir.home}/.ssh:/root/.ssh"
+      ]
+    )
+    args = vm.args_for(send_cmd: "echo hi", config_dir: "/tmp/cfg")
+    assert(args.any? { |a| a.include?(".gitconfig") })
+    assert(args.any? { |a| a.include?(".ssh") })
+  end
+
+  def test_args_works_with_no_vcs_mounts
+    vm = VB::VM.new(
+      workspace_dir: "/repos/myrepo-swift-falcon",
+      disk_image: "/repos/myrepo/.vibe/instance.raw"
+    )
+    args = vm.args_for(send_cmd: "echo hi", config_dir: "/tmp/cfg")
+    refute(args.any? { |a| a.include?(".config/jj") })
   end
 
   def test_args_includes_parent_dir_mount
     args = @vm.args_for(send_cmd: "echo hi", config_dir: "/tmp/cfg")
-    assert args.any? { |a| a.include?("/repos:/repos") }
+    assert(args.any? { |a| a.include?("/repos:/repos") })
   end
 
   def test_args_includes_expect_and_send_pairs
@@ -46,7 +70,7 @@ class VB::VMTest < TLDR
     @vm.define_singleton_method(:run_vibe) { |args, chdir: nil| vibe_args = args }
     @vm.launch(send_cmd: "opencode")
     assert_equal Array, vibe_args.class
-    assert vibe_args.any? { |a| a.include?("opencode") }
+    assert(vibe_args.any? { |a| a.include?("opencode") })
   end
 
   def test_launch_cleans_up_tmpdir

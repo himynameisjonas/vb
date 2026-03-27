@@ -6,19 +6,21 @@ module VB
   class Pool
     def initialize(
       repo_root:,
+      vcs: nil,
       state_class: State,
       names_class: Names,
-      workspace_factory: ->(workspace_dir:, repo_root:) { Workspace.new(workspace_dir: workspace_dir, repo_root: repo_root) },
-      vm_factory: ->(workspace_dir:, disk_image:) { VM.new(workspace_dir: workspace_dir, disk_image: disk_image) },
+      workspace_factory: nil,
+      vm_factory: nil,
       deps_factory: ->(repo_root:, workspace_dir:) { Deps.new(repo_root: repo_root, workspace_dir: workspace_dir) },
       process_factory: ->(*) { Process.new },
       bootstrap_factory: ->(repo_root:) { Bootstrap.new(repo_root: repo_root) }
     )
       @repo_root = repo_root
+      @vcs = vcs
       @state_class = state_class
       @names_class = names_class
-      @workspace_factory = workspace_factory
-      @vm_factory = vm_factory
+      @workspace_factory = workspace_factory || default_workspace_factory
+      @vm_factory = vm_factory || default_vm_factory
       @deps_factory = deps_factory
       @process_factory = process_factory
       @bootstrap_factory = bootstrap_factory
@@ -127,11 +129,11 @@ module VB
       return if File.exist?(src)
 
       bootstrap = @bootstrap_factory.call(repo_root: @repo_root)
-      if File.exist?(bootstrap.script_path)
-        bootstrap.run
-      else
+      unless File.exist?(bootstrap.script_path)
         raise "No disk image found at #{src}. Create a bootstrap script with `vb bootstrap edit` or add one manually."
       end
+
+      bootstrap.run
     end
 
     def copy_disk(src, dst)
@@ -150,10 +152,25 @@ module VB
       FileUtils.cp(src, File.join(workspace_dir, ".env.development")) if File.exist?(src)
     end
 
+    def vcs
+      @vcs ||= VCS.detect(@repo_root)
+    end
+
+    def default_workspace_factory
+      ->(workspace_dir:, repo_root:) { Workspace.new(workspace_dir: workspace_dir, repo_root: repo_root, vcs: vcs) }
+    end
+
+    def default_vm_factory
+      lambda { |workspace_dir:, disk_image:|
+        VM.new(workspace_dir: workspace_dir, disk_image: disk_image, vcs_mounts: vcs.config_mounts)
+      }
+    end
+
     def _destroy(name:, state:)
       workspaces = state["workspaces"] || {}
       info = workspaces[name]
       return unless info
+
       ws = @workspace_factory.call(workspace_dir: info["workspace_dir"], repo_root: @repo_root)
       ws.forget
       FileUtils.rm_rf(info["workspace_dir"])

@@ -248,7 +248,7 @@ class VB::PoolTest < TLDR
       state_class: build_fake_state_class(state),
       names_class: Class.new { def self.generate = "test-name" },
       workspace_factory: ->(**) { fake_workspace },
-      vm_factory: ->(workspace_dir:, disk_image:) do
+      vm_factory: ->(repo_root:, workspace_dir:, disk_image:) do
         call_log << :state_written if state.dig("workspaces", "test-name")
         fake_vm
       end
@@ -469,7 +469,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
       process_factory: ->(*) { fake_process },
-      deps_factory: ->(**) { Object.new.tap { |o| def o.install_commands = [] } }
+
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
 
@@ -493,7 +493,7 @@ class VB::PoolTest < TLDR
       names_class: Class.new { def self.generate = "test-ws" },
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
-      deps_factory: ->(**) { Object.new.tap { |o| def o.install_commands = [] } }
+
     )
     pool.define_singleton_method(:copy_disk) { |src, dst|
       copied[:src] = src
@@ -507,56 +507,6 @@ class VB::PoolTest < TLDR
     assert state["workspaces"]["test-ws"]["disk_image"].include?("test-ws")
   end
 
-  def test_acquire_prepends_dep_install_commands_to_send_cmd
-    state = {}
-    launched_cmd = nil
-    fake_workspace = Object.new
-    def fake_workspace.add(name: nil)
-    end
-    fake_vm = Object.new
-    fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
-    fake_deps = Object.new
-    fake_deps.define_singleton_method(:install_commands) { ["bundle install", "cd ember_app && pnpm install"] }
-
-    pool = VB::Pool.new(
-      repo_root: @repo_root,
-      state_class: build_fake_state_class(state),
-      names_class: Class.new { def self.generate = "dep-ws" },
-      workspace_factory: ->(**) { fake_workspace },
-      vm_factory: ->(**) { fake_vm },
-      deps_factory: ->(**) { fake_deps }
-    )
-    pool.define_singleton_method(:copy_disk) { |src, dst| }
-
-    pool.acquire(send_cmd: "opencode")
-    assert_equal "bundle install && cd ember_app && pnpm install && opencode", launched_cmd
-  end
-
-  def test_acquire_does_not_modify_send_cmd_when_deps_up_to_date
-    state = {}
-    launched_cmd = nil
-    fake_workspace = Object.new
-    def fake_workspace.add(name: nil)
-    end
-    fake_vm = Object.new
-    fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
-
-    pool = VB::Pool.new(
-      repo_root: @repo_root,
-      state_class: build_fake_state_class(state),
-      names_class: Class.new { def self.generate = "clean-ws" },
-      workspace_factory: ->(**) { fake_workspace },
-      vm_factory: ->(**) { fake_vm },
-      deps_factory: ->(**) { fake_deps }
-    )
-    pool.define_singleton_method(:copy_disk) { |src, dst| }
-
-    pool.acquire(send_cmd: "opencode")
-    assert_equal "opencode", launched_cmd
-  end
-
   def test_acquire_calls_add_before_copy_disk
     call_log = []
     state = {}
@@ -565,8 +515,6 @@ class VB::PoolTest < TLDR
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
     end
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
 
     pool = VB::Pool.new(
       repo_root: @repo_root,
@@ -574,7 +522,7 @@ class VB::PoolTest < TLDR
       names_class: Class.new { def self.generate = "order-ws" },
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
-      deps_factory: ->(**) { fake_deps }
+
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| call_log << :copy_disk }
 
@@ -592,8 +540,6 @@ class VB::PoolTest < TLDR
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
     end
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
 
     pool = VB::Pool.new(
       repo_root: @repo_root,
@@ -601,7 +547,7 @@ class VB::PoolTest < TLDR
       names_class: Class.new { def self.generate = "cool-owl" },
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
-      deps_factory: ->(**) { fake_deps }
+
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
     pool.define_singleton_method(:copy_repo_configs) { |dir| }
@@ -618,8 +564,6 @@ class VB::PoolTest < TLDR
     fake_vm = Object.new
     def fake_vm.launch(send_cmd:)
     end
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
 
     pool = VB::Pool.new(
       repo_root: @repo_root,
@@ -627,7 +571,7 @@ class VB::PoolTest < TLDR
       names_class: Class.new { def self.generate = "new-ws" },
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
-      deps_factory: ->(**) { fake_deps }
+
     )
     pool.define_singleton_method(:copy_disk) { |src, dst| }
     pool.define_singleton_method(:copy_repo_configs) { |dir| }
@@ -652,8 +596,6 @@ class VB::PoolTest < TLDR
     end
     fake_process = Object.new
     def fake_process.alive?(pid:) = false
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
 
     pool = VB::Pool.new(
       repo_root: @repo_root,
@@ -661,7 +603,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
       process_factory: ->(*) { fake_process },
-      deps_factory: ->(**) { fake_deps }
+
     )
 
     result = pool.acquire(send_cmd: "bash")
@@ -684,8 +626,6 @@ class VB::PoolTest < TLDR
     fake_vm.define_singleton_method(:launch) { |send_cmd:| launched_cmd = send_cmd }
     fake_process = Object.new
     def fake_process.alive?(pid:) = false
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
 
     pool = VB::Pool.new(
       repo_root: @repo_root,
@@ -693,7 +633,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
       process_factory: ->(*) { fake_process },
-      deps_factory: ->(**) { fake_deps }
+
     )
 
     pool.acquire(send_cmd: "bash", resume_cmd: "bash --login")
@@ -831,8 +771,6 @@ class VB::PoolTest < TLDR
     def fake_vm.launch(send_cmd:) = nil
     fake_process = Object.new
     def fake_process.alive?(pid:) = false
-    fake_deps = Object.new
-    def fake_deps.install_commands = []
 
     pool = VB::Pool.new(
       repo_root: @repo_root,
@@ -840,7 +778,7 @@ class VB::PoolTest < TLDR
       workspace_factory: ->(**) { fake_workspace },
       vm_factory: ->(**) { fake_vm },
       process_factory: ->(*) { fake_process },
-      deps_factory: ->(**) { fake_deps },
+
       bootstrap_factory: ->(**) { fake_bootstrap }
     )
 
